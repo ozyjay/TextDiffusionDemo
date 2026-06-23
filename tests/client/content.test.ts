@@ -27,4 +27,19 @@ describe('public copy', () => {
     expect(appSource).toContain('showAdvanced');
     expect(appSource).toContain('Staff controls');
   });
+
+  it('includes autoplay and changed-text highlighting hooks', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Autoplay');
+    expect(appSource).toContain('highlightedSegments');
+    expect(appSource).toContain('changed-word');
+  });
+
+  it('includes staff-only model-assisted mode copy', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Model-assisted');
+    expect(appSource).toContain('modelAssisted');
+  });
 });

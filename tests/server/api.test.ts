@@ -63,4 +63,23 @@ describe('Express API', () => {
     expect(response.body.trace.outputType).toBe('python');
     expect(response.body.trace.stages.at(-1).text).toContain('temperatures');
   });
+
+  it('falls back to scripted output when model-assisted mode has no adapter', async () => {
+    const response = await request(createApp({ modelAdapterUrl: '' }))
+      .post('/api/refine')
+      .send({
+        outputType: 'story',
+        promptId: 'robot-orientation-story',
+        style: 'clear',
+        creativity: 'balanced',
+        length: 'medium',
+        constraint: 'include-robot',
+        steps: 5,
+        mode: 'model-assisted'
+      })
+      .expect(200);
+
+    expect(response.body.mode).toBe('model-fallback');
+    expect(response.body.trace.id).toBe('robot-orientation-story-clear');
+  });
 });

@@ -1,6 +1,6 @@
 export type Creativity = 'safer' | 'balanced' | 'surprising';
 export type Length = 'short' | 'medium' | 'detailed';
-export type DemoMode = 'scripted' | 'replay' | 'template';
+export type DemoMode = 'scripted' | 'replay' | 'template' | 'model-assisted' | 'model-fallback';
 export type OutputType = 'story' | 'python';
 
 export interface TraceControls {
@@ -41,4 +41,5 @@ export interface RefineRequest {
   length: Length;
   constraint: string;
   steps: number;
+  mode?: 'scripted' | 'model-assisted';
 }

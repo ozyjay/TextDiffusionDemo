@@ -39,6 +39,6 @@ export async function requestRefinement(request: RefineRequest): Promise<{ mode:
       getLocalTraces().find((trace) => trace.outputType === request.outputType) ??
       getLocalTraces()[0];
 
-    return { mode: 'replay', trace: fallback };
+    return { mode: request.mode === 'model-assisted' ? 'model-fallback' : 'replay', trace: fallback };
   }
 }

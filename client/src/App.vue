@@ -2,6 +2,8 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { PUBLIC_EXPLANATION } from './content/publicCopy';
 import { fetchPrompts, requestRefinement } from './services/api';
+import { getNextAutoplaySelection, type AutoplaySelection } from './services/autoplay';
+import { buildHighlightedSegments } from './services/stageDiff';
 import type {
   Creativity,
   Length,
@@ -41,7 +43,11 @@ const mode = ref('scripted');
 const isRunning = ref(false);
 const reducedMotion = ref(false);
 const showAdvanced = ref(false);
+const autoplayEnabled = ref(false);
+const modelAssisted = ref(false);
+const lastAutoplaySelection = ref<AutoplaySelection | null>(null);
 let timer: number | undefined;
+let autoplayTimer: number | undefined;
 
 const filteredPrompts = computed(() =>
   prompts.value.filter((prompt) => prompt.outputType === outputType.value)
@@ -59,6 +65,14 @@ const selectedPrompt = computed(() =>
   filteredPrompts.value.find((prompt) => prompt.id === selectedPromptId.value)
 );
 
+const previousStageText = computed(() =>
+  activeTrace.value && activeIndex.value > 0 ? activeTrace.value.stages[activeIndex.value - 1].text : ''
+);
+
+const highlightedSegments = computed(() =>
+  currentStage.value ? buildHighlightedSegments(previousStageText.value, currentStage.value.text) : []
+);
+
 onMounted(async () => {
   prompts.value = await fetchPrompts();
   syncSelectedPrompt();
@@ -67,6 +81,13 @@ onMounted(async () => {
 watch(outputType, () => {
   syncSelectedPrompt();
   resetDemo();
+});
+
+watch(autoplayEnabled, (enabled) => {
+  clearAutoplayTimer();
+  if (enabled) {
+    queueAutoplay(800);
+  }
 });
 
 function syncSelectedPrompt() {
@@ -82,6 +103,7 @@ function syncSelectedPrompt() {
 
 async function runDemo(nextMode = 'scripted') {
   clearTimer();
+  clearAutoplayTimer();
   isRunning.value = true;
   const response = await requestRefinement({
     outputType: outputType.value,
@@ -90,12 +112,25 @@ async function runDemo(nextMode = 'scripted') {
     creativity: creativity.value,
     length: length.value,
     constraint: constraint.value,
-    steps: steps.value
+    steps: steps.value,
+    mode: modelAssisted.value ? 'model-assisted' : 'scripted'
   });
   activeTrace.value = response.trace;
   mode.value = nextMode === 'replay' ? 'replay' : response.mode;
   activeIndex.value = 0;
   scheduleNextStage();
+}
+
+async function runAutoplayDemo() {
+  const selection = getNextAutoplaySelection(prompts.value, lastAutoplaySelection.value);
+  if (!selection) {
+    return;
+  }
+
+  lastAutoplaySelection.value = selection;
+  outputType.value = selection.outputType;
+  selectedPromptId.value = selection.promptId;
+  await runDemo('autoplay');
 }
 
 function scheduleNextStage() {
@@ -106,6 +141,9 @@ function scheduleNextStage() {
 
   if (activeIndex.value >= activeTrace.value.stages.length - 1) {
     isRunning.value = false;
+    if (autoplayEnabled.value) {
+      queueAutoplay(4500);
+    }
     return;
   }
 
@@ -117,6 +155,8 @@ function scheduleNextStage() {
 
 function resetDemo() {
   clearTimer();
+  clearAutoplayTimer();
+  autoplayEnabled.value = false;
   activeTrace.value = null;
   activeIndex.value = -1;
   isRunning.value = false;
@@ -127,6 +167,24 @@ function clearTimer() {
   if (timer) {
     window.clearTimeout(timer);
     timer = undefined;
+  }
+}
+
+function toggleAutoplay() {
+  autoplayEnabled.value = !autoplayEnabled.value;
+}
+
+function queueAutoplay(delay: number) {
+  clearAutoplayTimer();
+  autoplayTimer = window.setTimeout(() => {
+    void runAutoplayDemo();
+  }, reducedMotion.value ? Math.min(delay, 800) : delay);
+}
+
+function clearAutoplayTimer() {
+  if (autoplayTimer) {
+    window.clearTimeout(autoplayTimer);
+    autoplayTimer = undefined;
   }
 }
 </script>
@@ -141,7 +199,7 @@ function clearTimer() {
       </div>
       <aside class="status-panel" aria-label="Demo status">
         <span class="mode-label">Mode: {{ mode }}</span>
-        <span>{{ isRunning ? 'Refining' : 'Ready' }}</span>
+        <span>{{ autoplayEnabled ? 'Autoplay on' : isRunning ? 'Refining' : 'Ready' }}</span>
       </aside>
     </header>
 
@@ -182,6 +240,9 @@ function clearTimer() {
       <div class="button-row">
         <button class="primary" type="button" @click="runDemo()">Diffuse Text</button>
         <button type="button" @click="runDemo('replay')">Replay</button>
+        <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
+          Autoplay
+        </button>
         <button type="button" @click="resetDemo">Reset</button>
       </div>
     </section>
@@ -207,8 +268,14 @@ function clearTimer() {
             <span>Step {{ activeIndex }} - {{ currentStage.label }}</span>
             <strong>{{ currentStage.note }}</strong>
           </div>
-          <pre v-if="outputType === 'python'">{{ currentStage.text }}</pre>
-          <p v-else>{{ currentStage.text }}</p>
+          <pre v-if="outputType === 'python'"><template
+            v-for="(segment, index) in highlightedSegments"
+            :key="`${segment.text}-${index}`"
+          ><mark v-if="segment.changed" class="changed-word">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></pre>
+          <p v-else><template
+            v-for="(segment, index) in highlightedSegments"
+            :key="`${segment.text}-${index}`"
+          ><mark v-if="segment.changed" class="changed-word">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></p>
         </template>
         <template v-else>
           <p class="idle-copy">{{ PUBLIC_EXPLANATION }}</p>
@@ -261,6 +328,10 @@ function clearTimer() {
         <label>
           Speed
           <input v-model.number="speed" min="1000" max="3200" step="100" type="range" />
+        </label>
+        <label class="checkbox-line">
+          <input v-model="modelAssisted" type="checkbox" />
+          Model-assisted
         </label>
         <label class="checkbox-line">
           <input v-model="reducedMotion" type="checkbox" />
