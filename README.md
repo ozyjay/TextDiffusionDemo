@@ -49,6 +49,40 @@ For wiring tests only, `DREAM_ADAPTER_MOCK=1 ./scripts/dream_adapter.sh` starts
 a mock adapter with the same API shape. Do not present mock mode as a real text
 diffusion model.
 
+### PowerShell helpers
+
+If you mainly use `pwsh`, use the scripts in `scripts/pwsh/`.
+
+Run the main demo:
+
+```powershell
+.\scripts\pwsh\dev.ps1
+```
+
+Run the mock Dream adapter in a second terminal:
+
+```powershell
+.\scripts\pwsh\dream-adapter-mock.ps1
+```
+
+Run the real Dream adapter on a CUDA GPU host:
+
+```powershell
+.\scripts\pwsh\dream-adapter.ps1
+```
+
+Smoke-test running services:
+
+```powershell
+.\scripts\pwsh\smoke.ps1
+```
+
+Run tests and build:
+
+```powershell
+.\scripts\pwsh\verify.ps1
+```
+
 ## Ports
 
 - Frontend: `3300`
