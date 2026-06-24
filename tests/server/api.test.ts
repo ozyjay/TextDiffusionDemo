@@ -65,7 +65,7 @@ describe('Express API', () => {
   });
 
   it('falls back to scripted output when model-assisted mode has no adapter', async () => {
-    const response = await request(createApp({ modelAdapterUrl: '' }))
+    const response = await request(createApp({ modelTraceProvider: async () => null }))
       .post('/api/refine')
       .send({
         outputType: 'story',
@@ -81,6 +81,39 @@ describe('Express API', () => {
 
     expect(response.body.mode).toBe('model-fallback');
     expect(response.body.trace.id).toBe('robot-orientation-story-clear');
+  });
+
+  it('uses backend-managed model worker traces when no external adapter URL is configured', async () => {
+    const response = await request(createApp({
+      modelTraceProvider: async (_request, seedTrace) => ({
+        ...seedTrace,
+        id: 'robot-orientation-story-diffusiongemma',
+        stages: [
+          { label: 'Mask 0/8', text: '[Mask] [Mask]', note: 'Model draft frame.' },
+          { label: 'Denoise 2/8', text: 'The robot [Mask]', note: 'Model draft frame.' },
+          { label: 'Final', text: 'The robot waved at orientation.', note: 'Model final.' }
+        ]
+      })
+    }))
+      .post('/api/refine')
+      .send({
+        outputType: 'story',
+        promptId: 'robot-orientation-story',
+        style: 'funny',
+        creativity: 'balanced',
+        length: 'short',
+        constraint: 'include-robot',
+        steps: 5,
+        mode: 'model-assisted'
+      })
+      .expect(200);
+
+    expect(response.body.mode).toBe('model-assisted');
+    expect(response.body.trace.stages.map((stage: { label: string }) => stage.label)).toEqual([
+      'Mask 0/8',
+      'Denoise 2/8',
+      'Final'
+    ]);
   });
 
   it('falls back when a configured adapter rejects the request', async () => {

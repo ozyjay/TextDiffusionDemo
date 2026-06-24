@@ -7,7 +7,7 @@ from typing import Any
 
 from .engine import DiffusionGemmaEngine, DiffusionGemmaUnavailable
 from .prompting import DEFAULT_MODEL
-from .trace_mapping import build_trace_from_final
+from .trace_mapping import build_trace_from_final, build_trace_from_snapshots
 
 
 SERVICE_NAME = "diffusiongemma-adapter"
@@ -73,8 +73,15 @@ def refine_payload(payload: dict[str, Any], engine: DiffusionGemmaEngine) -> tup
     if request.get("outputType") != "story":
         return 503, {"error": "DiffusionGemma adapter v1 supports story output only."}
 
-    final_text = engine.refine(request, seed_trace)
-    trace = build_trace_from_final(seed_trace, final_text)
+    result = engine.refine(request, seed_trace)
+    if isinstance(result, dict):
+        trace = build_trace_from_snapshots(
+            seed_trace,
+            result.get("snapshots", []),
+            str(result.get("finalText", "")),
+        )
+    else:
+        trace = build_trace_from_final(seed_trace, str(result))
     return 200, {"trace": trace}
 
 

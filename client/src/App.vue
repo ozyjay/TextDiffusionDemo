@@ -253,7 +253,7 @@ function clearAutoplayTimer() {
         <ol>
           <li
             v-for="(stage, index) in activeTrace?.stages ?? []"
-            :key="stage.label"
+            :key="`${stage.label}-${index}`"
             :class="{ visible: index <= activeIndex, current: index === activeIndex }"
           >
             <span>Step {{ index }}</span>

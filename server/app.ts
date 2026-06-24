@@ -6,11 +6,19 @@ import {
 } from './services/traceService';
 import { requestModelTrace } from './services/modelAdapter';
 import type { RefineRequest } from '../shared/types';
+import type { Trace } from '../shared/types';
+
+export type ModelTraceProvider = (
+  request: RefineRequest,
+  seedTrace: Trace,
+  timeoutMs: number
+) => Promise<Trace | null>;
 
 export interface AppOptions {
   modelAdapterUrl?: string;
   modelAdapterTimeoutMs?: number;
   fetchImpl?: typeof fetch;
+  modelTraceProvider?: ModelTraceProvider;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -58,7 +66,8 @@ export function createApp(options: AppOptions = {}) {
       const modelTrace = await requestModelTrace(refineRequest, seedTrace, {
         adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
         fetchImpl: options.fetchImpl,
-        timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000)
+        timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
+        modelTraceProvider: options.modelTraceProvider
       });
 
       if (modelTrace) {

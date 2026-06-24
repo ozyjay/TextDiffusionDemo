@@ -19,7 +19,7 @@ class DiffusionGemmaEngine:
         self._processor = None
         self._lock = threading.Lock()
 
-    def refine(self, request: dict[str, Any], seed_trace: dict[str, Any]) -> str:
+    def refine(self, request: dict[str, Any], seed_trace: dict[str, Any]) -> dict[str, Any]:
         prompt = build_prompt(request, seed_trace)
         options = build_generation_options(request)
         model, processor = self._load()
@@ -33,7 +33,7 @@ class DiffusionGemmaEngine:
         )
 
         with self._lock:
-            result = self._generate(
+            chunks = self._stream_generate(
                 model,
                 processor,
                 rendered_prompt,
@@ -41,18 +41,35 @@ class DiffusionGemmaEngine:
                 max_denoising_steps=options.max_denoising_steps,
                 block_length=options.block_length,
                 temperature=options.temperature,
+                diffusion_show_unmasking=True,
+                diffusion_unmasking_interval=options.diffusion_unmasking_interval,
+                diffusion_unmasking_width=240,
                 verbose=False,
             )
+            snapshots: list[dict[str, str]] = []
+            final_parts: list[str] = []
+            for chunk in chunks:
+                if getattr(chunk, "is_draft", False):
+                    draft_text = clean_generated_text(str(getattr(chunk, "draft_text", "")))
+                    if draft_text:
+                        step = int(getattr(chunk, "diffusion_step", 0) or 0)
+                        total = int(getattr(chunk, "diffusion_total_steps", 0) or 0)
+                        label = "Mask" if step == 0 else "Denoise"
+                        snapshots.append({"label": f"{label} {step}/{total}", "text": draft_text})
+                    continue
+                final_parts.append(str(getattr(chunk, "text", "")))
 
-        text = getattr(result, "text", result)
-        return clean_generated_text(str(text))
+        return {
+            "snapshots": snapshots,
+            "finalText": clean_generated_text("".join(final_parts)),
+        }
 
     def _load(self):
         if self._model is not None and self._processor is not None:
             return self._model, self._processor
 
         try:
-            from mlx_vlm.generate import generate
+            from mlx_vlm.generate import stream_generate
             from mlx_vlm.prompt_utils import apply_chat_template
             from mlx_vlm.utils import load
         except ImportError as error:
@@ -65,13 +82,13 @@ class DiffusionGemmaEngine:
         except Exception as error:
             raise DiffusionGemmaUnavailable(f"Could not load DiffusionGemma model: {error}") from error
 
-        self._generate = generate
+        self._stream_generate = stream_generate
         self._apply_chat_template = apply_chat_template
         self._model = model
         self._processor = processor
         return model, processor
 
-    def _generate(self, *args, **kwargs):
+    def _stream_generate(self, *args, **kwargs):
         raise DiffusionGemmaUnavailable("DiffusionGemma model has not been loaded.")
 
     def _apply_chat_template(self, *args, **kwargs):

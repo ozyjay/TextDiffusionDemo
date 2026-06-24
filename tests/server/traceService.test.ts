@@ -34,6 +34,24 @@ describe('trace service', () => {
     ).toThrow(/prompt/i);
   });
 
+  it('accepts model-assisted traces with variable draft stages', () => {
+    const trace = validateTrace({
+      id: 'robot-orientation-story-diffusiongemma',
+      promptId: 'robot-orientation-story',
+      outputType: 'story',
+      prompt: 'A robot joins university orientation.',
+      style: 'funny',
+      controls: { creativity: 'balanced', length: 'short', constraint: 'include-robot', steps: 5 },
+      stages: [
+        { label: 'Mask 0/8', text: '[Mask] [Mask]', note: 'Model draft frame.' },
+        { label: 'Denoise 2/8', text: 'The robot [Mask]', note: 'Model draft frame.' },
+        { label: 'Final', text: 'The robot waved at orientation.', note: 'Model final.' }
+      ]
+    });
+
+    expect(trace.stages.map((stage) => stage.label)).toEqual(['Mask 0/8', 'Denoise 2/8', 'Final']);
+  });
+
   it('returns prompt cards for every curated prompt', () => {
     const prompts = getPrompts();
 

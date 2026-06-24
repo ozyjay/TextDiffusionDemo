@@ -24,13 +24,12 @@ export function validateTrace(trace: Trace): Trace {
     throw new Error('Trace style is required.');
   }
 
-  if (trace.stages.length !== stageOrder.length) {
-    throw new Error('Trace must contain Noise, Rough, Clear, Styled, and Final stages.');
-  }
-
   const labels = trace.stages.map((stage) => stage.label);
-  if (labels.some((label, index) => label !== stageOrder[index])) {
-    throw new Error('Trace stages are out of order.');
+  const canonical = labels.length === stageOrder.length &&
+    labels.every((label, index) => label === stageOrder[index]);
+  const modelAssisted = trace.id.endsWith('-diffusiongemma');
+  if (!canonical && !modelAssisted) {
+    throw new Error('Trace must contain Noise, Rough, Clear, Styled, and Final stages.');
   }
 
   trace.stages.forEach((stage) => {

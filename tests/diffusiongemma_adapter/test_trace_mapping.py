@@ -1,6 +1,10 @@
 import unittest
 
-from diffusiongemma_adapter.trace_mapping import build_trace_from_final, clean_generated_text
+from diffusiongemma_adapter.trace_mapping import (
+    build_trace_from_final,
+    build_trace_from_snapshots,
+    clean_generated_text,
+)
 
 
 class TraceMappingTests(unittest.TestCase):
@@ -64,6 +68,39 @@ class TraceMappingTests(unittest.TestCase):
         trace = build_trace_from_final(seed_trace, "   ")
 
         self.assertEqual(trace["stages"][-1]["text"], "scripted final")
+
+    def test_build_trace_from_snapshots_uses_real_draft_frames(self):
+        seed_trace = {
+            "id": "robot-orientation-story-clear",
+            "promptId": "robot-orientation-story",
+            "outputType": "story",
+            "prompt": "A robot joins university orientation.",
+            "style": "clear",
+            "controls": {},
+            "stages": [
+                {"label": "Noise", "text": "noise", "note": "noise note"},
+                {"label": "Rough", "text": "rough", "note": "rough note"},
+                {"label": "Clear", "text": "clear", "note": "clear note"},
+                {"label": "Styled", "text": "styled", "note": "styled note"},
+                {"label": "Final", "text": "scripted final", "note": "old note"},
+            ],
+        }
+        snapshots = [
+            {"label": "Mask 0/8", "text": "[Mask] [Mask]"},
+            {"label": "Denoise 2/8", "text": "The robot [Mask]"},
+            {"label": "Denoise 2/8", "text": "The robot [Mask]"},
+            {"label": "Denoise 4/8", "text": "The robot waved."},
+        ]
+
+        trace = build_trace_from_snapshots(seed_trace, snapshots, "The robot waved at orientation.")
+
+        self.assertEqual([stage["label"] for stage in trace["stages"]], [
+            "Mask 0/8",
+            "Denoise 2/8",
+            "Denoise 4/8",
+            "Final",
+        ])
+        self.assertEqual(trace["stages"][-1]["text"], "The robot waved at orientation.")
 
 
 if __name__ == "__main__":

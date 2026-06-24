@@ -16,19 +16,17 @@ Scripted traces first. Model-assisted refinement later.
 
 ## Model-assisted spike
 
-The demo includes an optional staff-only model-assisted mode. Set `MODEL_ADAPTER_URL`
-to a local adapter, expected by default at `http://127.0.0.1:8600`. When enabled,
-the Express API posts to `POST <MODEL_ADAPTER_URL>/api/refine` with:
+The demo includes an optional staff-only model-assisted mode for local
+DiffusionGemma experiments. The frontend still calls `POST /api/refine`; when
+staff enable **Model-assisted**, the Express backend lazily starts a
+project-local Python worker and talks to it over newline-delimited JSON.
 
-- `request`: selected prompt, output type, style, and controls;
-- `seedTrace`: the scripted fallback trace.
+Model-assisted story runs can return real DiffusionGemma draft frames such as
+`Mask 0/8` and `Denoise 2/8`, followed by the final model output. Unsupported
+lanes, missing runtimes, timeouts, invalid traces, or empty draft frames return
+the scripted fallback as `model-fallback`.
 
-The adapter may return either `{ "trace": <trace> }` or a trace object directly.
-Returned traces are validated and must keep the requested prompt lane. If the
-adapter is missing, slow, invalid, or unavailable, the demo returns the scripted
-fallback as `model-fallback`.
-
-### Local DiffusionGemma adapter
+### Local DiffusionGemma runtime
 
 For local Apple Silicon experiments with `mlx-community/diffusiongemma-26B-A4B-it-4bit`,
 use `mlx-vlm` from a project-local virtual environment:
@@ -38,23 +36,22 @@ python3 -m venv .venv-diffusiongemma
 .venv-diffusiongemma/bin/python -m pip install -U pip -r adapters/diffusiongemma_adapter/requirements.txt
 ```
 
-Start the adapter in a second terminal:
+Start the main demo:
 
 ```bash
-./scripts/diffusiongemma_adapter.sh
+./scripts/dev.sh
 ```
 
-Then start the main demo with `MODEL_ADAPTER_URL` pointing to the adapter:
+Enable **Model-assisted** under Staff controls. The first request may take a
+while because the backend starts `.venv-diffusiongemma/bin/python -m
+diffusiongemma_adapter.worker` and loads the model once; later requests reuse
+the warm worker. Set `DIFFUSIONGEMMA_PYTHON` or `DIFFUSIONGEMMA_MODEL` to
+override the defaults. Set `MODEL_ADAPTER_TIMEOUT_MS` if you need a shorter or
+longer live-model wait; the default is `30000`.
 
-```bash
-MODEL_ADAPTER_URL=http://127.0.0.1:8600 ./scripts/dev.sh
-```
-
-Enable **Model-assisted** under Staff controls to try live DiffusionGemma output.
-The public demo still falls back to scripted traces whenever model-assisted mode
-is unavailable, slow, invalid, or used for an unsupported output lane.
-Set `MODEL_ADAPTER_TIMEOUT_MS` if you need a shorter or longer live-model wait;
-the default is `30000`.
+`MODEL_ADAPTER_URL` is still accepted as a legacy third-party adapter escape
+hatch. If it is set, Express posts to `POST <MODEL_ADAPTER_URL>/api/refine`
+instead of starting the managed worker.
 
 For a direct one-off model smoke test without the demo UI:
 
@@ -78,12 +75,6 @@ Run the main demo:
 
 ```powershell
 .\scripts\pwsh\dev.ps1
-```
-
-Run the DiffusionGemma adapter in a second terminal:
-
-```powershell
-.\scripts\pwsh\diffusiongemma-adapter.ps1
 ```
 
 Smoke-test running services:

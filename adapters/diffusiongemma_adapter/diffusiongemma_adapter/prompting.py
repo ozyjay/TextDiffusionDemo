@@ -13,6 +13,7 @@ class GenerationOptions:
     max_denoising_steps: int
     block_length: int
     temperature: float
+    diffusion_unmasking_interval: int
 
 
 def build_prompt(request: dict[str, Any], seed_trace: dict[str, Any]) -> str:
@@ -37,13 +38,15 @@ def build_prompt(request: dict[str, Any], seed_trace: dict[str, Any]) -> str:
 def build_generation_options(request: dict[str, Any]) -> GenerationOptions:
     length = str(request.get("length", "medium"))
     creativity = str(request.get("creativity", "balanced"))
-    requested_steps = int(request.get("steps", 5))
+    requested_steps = max(1, int(request.get("steps", 5)))
+    denoising_steps = bounded_int(requested_steps * 4, minimum=8, maximum=32)
 
     return GenerationOptions(
         max_tokens=160 if length == "detailed" else 96,
-        max_denoising_steps=bounded_int(requested_steps * 4, minimum=8, maximum=32),
+        max_denoising_steps=denoising_steps,
         block_length=32,
         temperature=0.2 if creativity == "surprising" else 0.0,
+        diffusion_unmasking_interval=max(1, denoising_steps // requested_steps),
     )
 
 

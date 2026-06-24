@@ -18,7 +18,7 @@ export interface PromptCard {
 }
 
 export interface RefinementStage {
-  label: 'Noise' | 'Rough' | 'Clear' | 'Styled' | 'Final';
+  label: string;
   text: string;
   note: string;
 }

@@ -40,16 +40,26 @@ describe('model adapter', () => {
     expect(result?.stages.at(-1)?.text).toContain('Model-assisted polish');
   });
 
-  it('returns null when no adapter URL is configured', async () => {
+  it('uses a backend-managed model trace provider when no adapter URL is configured', async () => {
     const seedTrace = refineTrace(request);
+    const modelTrace = {
+      ...seedTrace,
+      id: 'robot-orientation-story-diffusiongemma',
+      stages: [
+        { label: 'Mask 0/8', text: '[Mask]', note: 'Model draft frame.' },
+        { label: 'Final', text: 'The robot waved.', note: 'Model final.' }
+      ]
+    };
 
     const result = await requestModelTrace(request, seedTrace, {
       adapterUrl: '',
       fetchImpl: async () => new Response('{}'),
+      modelTraceProvider: async () => modelTrace,
       timeoutMs: 50
     });
 
-    expect(result).toBeNull();
+    expect(result?.id).toBe('robot-orientation-story-diffusiongemma');
+    expect(result?.stages.map((stage) => stage.label)).toEqual(['Mask 0/8', 'Final']);
   });
 
   it('returns null when the adapter rejects an unsupported lane', async () => {

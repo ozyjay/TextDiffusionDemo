@@ -1,5 +1,6 @@
 import type { RefineRequest, Trace } from '../../shared/types';
 import { validateTrace } from './traceService';
+import { requestDiffusionGemmaTrace } from './diffusionGemmaWorker';
 
 type FetchLike = typeof fetch;
 
@@ -7,6 +8,7 @@ export interface ModelAdapterOptions {
   adapterUrl?: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
+  modelTraceProvider?: (request: RefineRequest, seedTrace: Trace, timeoutMs: number) => Promise<Trace | null>;
 }
 
 export async function requestModelTrace(
@@ -16,7 +18,8 @@ export async function requestModelTrace(
 ): Promise<Trace | null> {
   const adapterUrl = options.adapterUrl?.trim();
   if (!adapterUrl) {
-    return null;
+    const provider = options.modelTraceProvider ?? requestDiffusionGemmaTrace;
+    return provider(request, seedTrace, options.timeoutMs ?? 30000);
   }
 
   const fetchImpl = options.fetchImpl ?? fetch;
