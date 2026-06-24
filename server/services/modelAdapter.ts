@@ -21,7 +21,7 @@ export async function requestModelTrace(
 
   const fetchImpl = options.fetchImpl ?? fetch;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 1800);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 30000);
 
   try {
     const response = await fetchImpl(`${adapterUrl.replace(/\/$/, '')}/api/refine`, {

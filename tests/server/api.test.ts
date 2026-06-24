@@ -82,4 +82,77 @@ describe('Express API', () => {
     expect(response.body.mode).toBe('model-fallback');
     expect(response.body.trace.id).toBe('robot-orientation-story-clear');
   });
+
+  it('falls back when a configured adapter rejects the request', async () => {
+    const response = await request(createApp({
+      modelAdapterUrl: 'http://127.0.0.1:8600',
+      fetchImpl: async () => new Response(JSON.stringify({ error: 'story output only' }), { status: 503 })
+    }))
+      .post('/api/refine')
+      .send({
+        outputType: 'python',
+        promptId: 'number-guess-python',
+        style: 'clear',
+        creativity: 'balanced',
+        length: 'medium',
+        constraint: 'none',
+        steps: 5,
+        mode: 'model-assisted'
+      })
+      .expect(200);
+
+    expect(response.body.mode).toBe('model-fallback');
+    expect(response.body.trace.outputType).toBe('python');
+  });
+
+  it('uses the configured model adapter timeout before falling back', async () => {
+    const seedResponse = await request(app)
+      .post('/api/refine')
+      .send({
+        outputType: 'story',
+        promptId: 'robot-orientation-story',
+        style: 'clear',
+        creativity: 'balanced',
+        length: 'medium',
+        constraint: 'include-robot',
+        steps: 5
+      });
+    const modelTrace = {
+      ...seedResponse.body.trace,
+      id: 'robot-orientation-story-timeout-check',
+      stages: seedResponse.body.trace.stages.map((stage: { label: string; text: string }) =>
+        stage.label === 'Final' ? { ...stage, text: 'This should arrive too late.' } : stage
+      )
+    };
+
+    const response = await request(createApp({
+      modelAdapterUrl: 'http://127.0.0.1:8600',
+      modelAdapterTimeoutMs: 1,
+      fetchImpl: async (_url, init) => {
+        await new Promise((resolve, reject) => {
+          const signal = init?.signal as AbortSignal | undefined;
+          const timer = setTimeout(resolve, 20);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(new Error('aborted'));
+          });
+        });
+        return new Response(JSON.stringify({ trace: modelTrace }), { status: 200 });
+      }
+    }))
+      .post('/api/refine')
+      .send({
+        outputType: 'story',
+        promptId: 'robot-orientation-story',
+        style: 'clear',
+        creativity: 'balanced',
+        length: 'medium',
+        constraint: 'include-robot',
+        steps: 5,
+        mode: 'model-assisted'
+      })
+      .expect(200);
+
+    expect(response.body.mode).toBe('model-fallback');
+  });
 });

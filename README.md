@@ -28,26 +28,47 @@ Returned traces are validated and must keep the requested prompt lane. If the
 adapter is missing, slow, invalid, or unavailable, the demo returns the scripted
 fallback as `model-fallback`.
 
-### Real text diffusion adapter
+### Local DiffusionGemma adapter
 
-For a true text diffusion model, use the Dream adapter:
+For local Apple Silicon experiments with `mlx-community/diffusiongemma-26B-A4B-it-4bit`,
+use `mlx-vlm` from a project-local virtual environment:
 
 ```bash
-python3 -m venv .venv-dream
-source .venv-dream/bin/activate
-pip install -r adapters/dream_adapter/requirements.txt
-./scripts/dream_adapter.sh
+python3 -m venv .venv-diffusiongemma
+.venv-diffusiongemma/bin/python -m pip install -U pip -r adapters/diffusiongemma_adapter/requirements.txt
 ```
 
-By default it targets `Dream-org/Dream-v0-Instruct-7B`. Dream's published
-runtime expects CUDA and at least 20 GB GPU memory, so this adapter is intended
-for a CUDA workstation or GPU host rather than the local Apple Silicon laptop.
-If the model runtime is unavailable, the adapter returns HTTP 503 and the demo
-falls back to scripted traces.
+Start the adapter in a second terminal:
 
-For wiring tests only, `DREAM_ADAPTER_MOCK=1 ./scripts/dream_adapter.sh` starts
-a mock adapter with the same API shape. Do not present mock mode as a real text
-diffusion model.
+```bash
+./scripts/diffusiongemma_adapter.sh
+```
+
+Then start the main demo with `MODEL_ADAPTER_URL` pointing to the adapter:
+
+```bash
+MODEL_ADAPTER_URL=http://127.0.0.1:8600 ./scripts/dev.sh
+```
+
+Enable **Model-assisted** under Staff controls to try live DiffusionGemma output.
+The public demo still falls back to scripted traces whenever model-assisted mode
+is unavailable, slow, invalid, or used for an unsupported output lane.
+Set `MODEL_ADAPTER_TIMEOUT_MS` if you need a shorter or longer live-model wait;
+the default is `30000`.
+
+For a direct one-off model smoke test without the demo UI:
+
+.venv-diffusiongemma/bin/python -m mlx_vlm.generate \
+  --model mlx-community/diffusiongemma-26B-A4B-it-4bit \
+  --system "You write safe, concise text for a public university Open Day AI demo. Return only the answer." \
+  --prompt "Prompt: A robot joins university orientation. Style: funny. Constraint: include university. Write one sentence under 18 words." \
+  --max-tokens 64 \
+  --max-denoising-steps 24 \
+  --block-length 32 \
+  --temperature 0.0 \
+  --seed 11 \
+  --no-verbose
+```
 
 ### PowerShell helpers
 
@@ -59,16 +80,10 @@ Run the main demo:
 .\scripts\pwsh\dev.ps1
 ```
 
-Run the mock Dream adapter in a second terminal:
+Run the DiffusionGemma adapter in a second terminal:
 
 ```powershell
-.\scripts\pwsh\dream-adapter-mock.ps1
-```
-
-Run the real Dream adapter on a CUDA GPU host:
-
-```powershell
-.\scripts\pwsh\dream-adapter.ps1
+.\scripts\pwsh\diffusiongemma-adapter.ps1
 ```
 
 Smoke-test running services:

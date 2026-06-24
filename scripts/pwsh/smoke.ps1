@@ -1,8 +1,7 @@
 param(
     [switch]$CheckPortsOnly,
     [string]$FrontendUrl = "http://127.0.0.1:3300/",
-    [string]$BackendUrl = "http://127.0.0.1:8300",
-    [string]$AdapterUrl = "http://127.0.0.1:8600"
+    [string]$BackendUrl = "http://127.0.0.1:8300"
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,12 +50,3 @@ $payload = @{
 
 $response = Invoke-RestMethod "$BackendUrl/api/refine" -Method Post -ContentType "application/json" -Body $payload
 Write-Host "Model-assisted response mode: $($response.mode)"
-
-Write-Host "Checking adapter health if available..."
-try {
-    $adapter = Invoke-RestMethod "$AdapterUrl/api/health" -TimeoutSec 2
-    Write-Host "Adapter OK: $($adapter.service), mock=$($adapter.mock)"
-}
-catch {
-    Write-Host "Adapter not reachable. This is fine unless you expected Dream adapter mode."
-}

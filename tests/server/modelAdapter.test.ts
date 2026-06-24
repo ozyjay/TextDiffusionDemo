@@ -52,6 +52,18 @@ describe('model adapter', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null when the adapter rejects an unsupported lane', async () => {
+    const seedTrace = refineTrace(request);
+
+    const result = await requestModelTrace(request, seedTrace, {
+      adapterUrl: 'http://127.0.0.1:8600',
+      fetchImpl: async () => new Response(JSON.stringify({ error: 'story output only' }), { status: 503 }),
+      timeoutMs: 50
+    });
+
+    expect(result).toBeNull();
+  });
+
   it('returns null when adapter output does not match the requested lane', async () => {
     const seedTrace = refineTrace(request);
     const mismatchedTrace = {

@@ -6,8 +6,8 @@ npm test
 Write-Host "Running production build..."
 npm run build
 
-Write-Host "Running Dream adapter unit tests..."
-$env:PYTHONPATH = "adapters/dream_adapter"
-python3 -m unittest discover -s tests/dream_adapter -v
+Write-Host "Running DiffusionGemma adapter unit tests..."
+$env:PYTHONPATH = "adapters/diffusiongemma_adapter"
+python3 -m unittest discover -s tests/diffusiongemma_adapter -v
 
 Write-Host "Verification complete."

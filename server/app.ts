@@ -9,6 +9,7 @@ import type { RefineRequest } from '../shared/types';
 
 export interface AppOptions {
   modelAdapterUrl?: string;
+  modelAdapterTimeoutMs?: number;
   fetchImpl?: typeof fetch;
 }
 
@@ -57,7 +58,7 @@ export function createApp(options: AppOptions = {}) {
       const modelTrace = await requestModelTrace(refineRequest, seedTrace, {
         adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
         fetchImpl: options.fetchImpl,
-        timeoutMs: 1800
+        timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000)
       });
 
       if (modelTrace) {
@@ -73,4 +74,9 @@ export function createApp(options: AppOptions = {}) {
   });
 
   return app;
+}
+
+function envNumber(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
