@@ -40,6 +40,7 @@ class PromptingTests(unittest.TestCase):
         self.assertEqual(options.max_denoising_steps, 32)
         self.assertEqual(options.block_length, 32)
         self.assertEqual(options.temperature, 0.2)
+        self.assertEqual(options.diffusion_unmasking_interval, 1)
 
     def test_generation_options_keep_safer_short_outputs_deterministic(self):
         request = {
@@ -53,6 +54,19 @@ class PromptingTests(unittest.TestCase):
         self.assertEqual(options.max_tokens, 96)
         self.assertEqual(options.max_denoising_steps, 8)
         self.assertEqual(options.temperature, 0.0)
+        self.assertEqual(options.diffusion_unmasking_interval, 8)
+
+    def test_generation_options_use_steps_as_visible_frame_count(self):
+        request = {
+            "creativity": "balanced",
+            "length": "short",
+            "steps": 6,
+        }
+
+        options = build_generation_options(request)
+
+        self.assertEqual(options.max_denoising_steps, 24)
+        self.assertEqual(options.diffusion_unmasking_interval, 4)
 
 
 if __name__ == "__main__":

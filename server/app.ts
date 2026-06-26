@@ -8,6 +8,9 @@ import { requestModelTrace } from './services/modelAdapter';
 import type { RefineRequest } from '../shared/types';
 import type { Trace } from '../shared/types';
 
+const CUSTOM_PROMPT_MIN_LENGTH = 8;
+const CUSTOM_PROMPT_MAX_LENGTH = 140;
+
 export type ModelTraceProvider = (
   request: RefineRequest,
   seedTrace: Trace,
@@ -58,11 +61,22 @@ export function createApp(options: AppOptions = {}) {
       length: body.length ?? 'medium',
       constraint: body.constraint ?? 'none',
       steps: body.steps ?? 5,
-      mode: body.mode ?? 'scripted'
+      mode: body.mode ?? 'scripted',
+      customPrompt: typeof body.customPrompt === 'string' ? body.customPrompt : undefined
     };
 
-    const seedTrace = refineTrace(refineRequest);
+    const customPrompt = refineRequest.mode === 'model-assisted'
+      ? normaliseCustomPrompt(refineRequest)
+      : null;
+    const seedTrace = customPrompt
+      ? { ...refineTrace(refineRequest), prompt: customPrompt }
+      : refineTrace(refineRequest);
     if (refineRequest.mode === 'model-assisted') {
+      if (refineRequest.outputType !== 'story') {
+        response.json({ mode: 'model-fallback', trace: seedTrace });
+        return;
+      }
+
       const modelTrace = await requestModelTrace(refineRequest, seedTrace, {
         adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
         fetchImpl: options.fetchImpl,
@@ -83,6 +97,19 @@ export function createApp(options: AppOptions = {}) {
   });
 
   return app;
+}
+
+export function normaliseCustomPrompt(request: Pick<RefineRequest, 'outputType' | 'customPrompt'>): string | null {
+  if (request.outputType !== 'story') {
+    return null;
+  }
+
+  const prompt = request.customPrompt?.trim() ?? '';
+  if (prompt.length < CUSTOM_PROMPT_MIN_LENGTH || prompt.length > CUSTOM_PROMPT_MAX_LENGTH) {
+    return null;
+  }
+
+  return prompt;
 }
 
 function envNumber(name: string, fallback: number): number {

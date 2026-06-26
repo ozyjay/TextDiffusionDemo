@@ -42,4 +42,5 @@ export interface RefineRequest {
   constraint: string;
   steps: number;
   mode?: 'scripted' | 'model-assisted';
+  customPrompt?: string;
 }

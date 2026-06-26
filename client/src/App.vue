@@ -9,6 +9,7 @@ import type {
   Length,
   OutputType,
   PromptCard,
+  RefineRequest,
   RefinementStage,
   Trace
 } from '../../shared/types';
@@ -31,6 +32,8 @@ const constraints = [
 const prompts = ref<PromptCard[]>([]);
 const outputType = ref<OutputType>('story');
 const selectedPromptId = ref('robot-orientation-story');
+const promptSource = ref<'cards' | 'custom'>('cards');
+const customPrompt = ref('');
 const selectedStyle = ref('clear');
 const creativity = ref<Creativity>('balanced');
 const length = ref<Length>('medium');
@@ -65,6 +68,39 @@ const selectedPrompt = computed(() =>
   filteredPrompts.value.find((prompt) => prompt.id === selectedPromptId.value)
 );
 
+const trimmedCustomPrompt = computed(() => customPrompt.value.trim());
+
+const customPromptAvailable = computed(() => outputType.value === 'story');
+
+const customPromptValid = computed(() =>
+  trimmedCustomPrompt.value.length >= 8 && trimmedCustomPrompt.value.length <= 140
+);
+
+const usingCustomPrompt = computed(() =>
+  promptSource.value === 'custom' && customPromptAvailable.value
+);
+
+const effectivePromptText = computed(() =>
+  usingCustomPrompt.value
+    ? trimmedCustomPrompt.value || 'Enter a short staff-supervised prompt'
+    : selectedPrompt.value?.prompt ?? 'Choose a prompt card'
+);
+
+const customPromptStatus = computed(() => {
+  const count = trimmedCustomPrompt.value.length;
+  if (!usingCustomPrompt.value) {
+    return `${count}/140`;
+  }
+  if (count < 8) {
+    return `${count}/140 - at least 8 characters`;
+  }
+  return `${count}/140`;
+});
+
+const canRunDemo = computed(() =>
+  !isRunning.value && (!usingCustomPrompt.value || customPromptValid.value)
+);
+
 const previousStageText = computed(() =>
   activeTrace.value && activeIndex.value > 0 ? activeTrace.value.stages[activeIndex.value - 1].text : ''
 );
@@ -79,6 +115,9 @@ onMounted(async () => {
 });
 
 watch(outputType, () => {
+  if (outputType.value !== 'story') {
+    promptSource.value = 'cards';
+  }
   syncSelectedPrompt();
   resetDemo();
 });
@@ -102,10 +141,14 @@ function syncSelectedPrompt() {
 }
 
 async function runDemo(nextMode = 'scripted') {
+  if (!canRunDemo.value) {
+    return;
+  }
+
   clearTimer();
   clearAutoplayTimer();
   isRunning.value = true;
-  const response = await requestRefinement({
+  const request: RefineRequest = {
     outputType: outputType.value,
     promptId: selectedPromptId.value,
     style: selectedStyle.value,
@@ -113,7 +156,14 @@ async function runDemo(nextMode = 'scripted') {
     length: length.value,
     constraint: constraint.value,
     steps: steps.value,
-    mode: modelAssisted.value ? 'model-assisted' : 'scripted'
+    mode: usingCustomPrompt.value || modelAssisted.value ? 'model-assisted' : 'scripted'
+  };
+  if (usingCustomPrompt.value && customPromptValid.value) {
+    request.customPrompt = trimmedCustomPrompt.value;
+  }
+
+  const response = await requestRefinement({
+    ...request
   });
   activeTrace.value = response.trace;
   mode.value = nextMode === 'replay' ? 'replay' : response.mode;
@@ -157,6 +207,7 @@ function resetDemo() {
   clearTimer();
   clearAutoplayTimer();
   autoplayEnabled.value = false;
+  customPrompt.value = '';
   activeTrace.value = null;
   activeIndex.value = -1;
   isRunning.value = false;
@@ -185,6 +236,16 @@ function clearAutoplayTimer() {
   if (autoplayTimer) {
     window.clearTimeout(autoplayTimer);
     autoplayTimer = undefined;
+  }
+}
+
+function setPromptSource(source: 'cards' | 'custom') {
+  if (source === 'custom' && !customPromptAvailable.value) {
+    return;
+  }
+  promptSource.value = source;
+  if (source === 'custom') {
+    modelAssisted.value = true;
   }
 }
 </script>
@@ -235,10 +296,10 @@ function clearAutoplayTimer() {
     <section class="run-bar" aria-label="Run controls">
       <div>
         <span class="label">Selected</span>
-        <strong>{{ selectedPrompt?.prompt ?? 'Choose a prompt card' }}</strong>
+        <strong>{{ effectivePromptText }}</strong>
       </div>
       <div class="button-row">
-        <button class="primary" type="button" @click="runDemo()">Diffuse Text</button>
+        <button class="primary" type="button" :disabled="!canRunDemo" @click="runDemo()">Diffuse Text</button>
         <button type="button" @click="runDemo('replay')">Replay</button>
         <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
           Autoplay
@@ -289,6 +350,35 @@ function clearAutoplayTimer() {
         Staff controls
       </button>
       <div v-if="showAdvanced" class="advanced-panel">
+        <div class="prompt-source" role="group" aria-label="Prompt source">
+          <span>Prompt source</span>
+          <button
+            type="button"
+            :class="{ selected: promptSource === 'cards' }"
+            @click="setPromptSource('cards')"
+          >
+            Prompt cards
+          </button>
+          <button
+            type="button"
+            :class="{ selected: promptSource === 'custom' }"
+            :disabled="!customPromptAvailable"
+            @click="setPromptSource('custom')"
+          >
+            Custom prompt
+          </button>
+        </div>
+        <label v-if="usingCustomPrompt" class="custom-prompt-field">
+          Custom prompt
+          <input
+            v-model="customPrompt"
+            maxlength="140"
+            minlength="8"
+            placeholder="A robot discovers a hidden campus garden."
+            type="text"
+          />
+          <span>{{ customPromptStatus }}</span>
+        </label>
         <div class="style-buttons" role="group" aria-label="Style">
           <span>Style</span>
           <button
@@ -329,8 +419,15 @@ function clearAutoplayTimer() {
           Speed
           <input v-model.number="speed" min="1000" max="3200" step="100" type="range" />
         </label>
+        <label>
+          <span class="range-label">
+            Draft frames
+            <strong>{{ steps }}</strong>
+          </span>
+          <input v-model.number="steps" min="3" max="8" step="1" type="range" />
+        </label>
         <label class="checkbox-line">
-          <input v-model="modelAssisted" type="checkbox" />
+          <input v-model="modelAssisted" :disabled="usingCustomPrompt" type="checkbox" />
           Model-assisted
         </label>
         <label class="checkbox-line">

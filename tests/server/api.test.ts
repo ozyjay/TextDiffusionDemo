@@ -84,16 +84,20 @@ describe('Express API', () => {
   });
 
   it('uses backend-managed model worker traces when no external adapter URL is configured', async () => {
+    let requestedSteps = 0;
     const response = await request(createApp({
-      modelTraceProvider: async (_request, seedTrace) => ({
-        ...seedTrace,
-        id: 'robot-orientation-story-diffusiongemma',
-        stages: [
-          { label: 'Mask 0/8', text: '[Mask] [Mask]', note: 'Model draft frame.' },
-          { label: 'Denoise 2/8', text: 'The robot [Mask]', note: 'Model draft frame.' },
-          { label: 'Final', text: 'The robot waved at orientation.', note: 'Model final.' }
-        ]
-      })
+      modelTraceProvider: async (modelRequest, seedTrace) => {
+        requestedSteps = modelRequest.steps;
+        return {
+          ...seedTrace,
+          id: 'robot-orientation-story-diffusiongemma',
+          stages: [
+            { label: 'Mask 0/8', text: '[Mask] [Mask]', note: 'Model draft frame.' },
+            { label: 'Denoise 2/8', text: 'The robot [Mask]', note: 'Model draft frame.' },
+            { label: 'Final', text: 'The robot waved at orientation.', note: 'Model final.' }
+          ]
+        };
+      }
     }))
       .post('/api/refine')
       .send({
@@ -103,17 +107,110 @@ describe('Express API', () => {
         creativity: 'balanced',
         length: 'short',
         constraint: 'include-robot',
-        steps: 5,
+        steps: 7,
         mode: 'model-assisted'
       })
       .expect(200);
 
+    expect(requestedSteps).toBe(7);
     expect(response.body.mode).toBe('model-assisted');
     expect(response.body.trace.stages.map((stage: { label: string }) => stage.label)).toEqual([
       'Mask 0/8',
       'Denoise 2/8',
       'Final'
     ]);
+  });
+
+  it('passes a valid custom story prompt to the model provider through the seed trace', async () => {
+    let providerPrompt = '';
+    const customPrompt = 'A robot discovers the quietest study corner on campus.';
+
+    const response = await request(createApp({
+      modelTraceProvider: async (_modelRequest, seedTrace) => {
+        providerPrompt = seedTrace.prompt;
+        return {
+          ...seedTrace,
+          id: 'robot-orientation-story-diffusiongemma',
+          stages: [
+            { label: 'Mask 0/8', text: '[Mask] [Mask]', note: 'Model draft frame.' },
+            { label: 'Final', text: 'The robot found a quiet campus study nook.', note: 'Model final.' }
+          ]
+        };
+      }
+    }))
+      .post('/api/refine')
+      .send({
+        outputType: 'story',
+        promptId: 'robot-orientation-story',
+        style: 'campus',
+        creativity: 'balanced',
+        length: 'short',
+        constraint: 'include-robot',
+        steps: 5,
+        mode: 'model-assisted',
+        customPrompt: `  ${customPrompt}  `
+      })
+      .expect(200);
+
+    expect(providerPrompt).toBe(customPrompt);
+    expect(response.body.mode).toBe('model-assisted');
+    expect(response.body.trace.prompt).toBe(customPrompt);
+  });
+
+  it('keeps the visible custom prompt on model fallback while using the curated scaffold', async () => {
+    const customPrompt = 'A tiny AI helps a lecturer find missing lab notes.';
+
+    const response = await request(createApp({ modelTraceProvider: async () => null }))
+      .post('/api/refine')
+      .send({
+        outputType: 'story',
+        promptId: 'tiny-ai-practical-story',
+        style: 'clear',
+        creativity: 'balanced',
+        length: 'medium',
+        constraint: 'none',
+        steps: 5,
+        mode: 'model-assisted',
+        customPrompt
+      })
+      .expect(200);
+
+    expect(response.body.mode).toBe('model-fallback');
+    expect(response.body.trace.prompt).toBe(customPrompt);
+    expect(response.body.trace.stages.map((stage: { label: string }) => stage.label)).toEqual([
+      'Noise',
+      'Rough',
+      'Clear',
+      'Styled',
+      'Final'
+    ]);
+  });
+
+  it('ignores custom prompts for the Python lane', async () => {
+    let providerCalled = false;
+
+    const response = await request(createApp({
+      modelTraceProvider: async () => {
+        providerCalled = true;
+        return null;
+      }
+    }))
+      .post('/api/refine')
+      .send({
+        outputType: 'python',
+        promptId: 'number-guess-python',
+        style: 'clear',
+        creativity: 'balanced',
+        length: 'short',
+        constraint: 'none',
+        steps: 5,
+        mode: 'model-assisted',
+        customPrompt: 'Please write about a secret visitor.'
+      })
+      .expect(200);
+
+    expect(providerCalled).toBe(false);
+    expect(response.body.trace.prompt).toBe('Write a small Python number guessing game.');
   });
 
   it('falls back when a configured adapter rejects the request', async () => {

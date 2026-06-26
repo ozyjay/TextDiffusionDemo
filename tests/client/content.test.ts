@@ -17,7 +17,6 @@ describe('public copy', () => {
   it('does not expose open free text in the default Open Day screen', () => {
     const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
 
-    expect(appSource).not.toContain('<textarea');
     expect(appSource).not.toContain('contenteditable');
   });
 
@@ -41,5 +40,21 @@ describe('public copy', () => {
 
     expect(appSource).toContain('Model-assisted');
     expect(appSource).toContain('modelAssisted');
+  });
+
+  it('exposes a staff frame-count control for model draft frames', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Draft frames');
+    expect(appSource).toContain('v-model.number="steps"');
+  });
+
+  it('keeps custom prompt entry behind staff controls', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Prompt source');
+    expect(appSource).toContain('Custom prompt');
+    expect(appSource).toContain('v-if="showAdvanced"');
+    expect(appSource).toContain('customPrompt');
   });
 });
