@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.DS_Store
+.superpowers/
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]

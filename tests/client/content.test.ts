@@ -1,0 +1,60 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { PUBLIC_EXPLANATION } from '../../client/src/content/publicCopy';
+
+describe('public copy', () => {
+  it('uses modest diffusion-inspired wording', () => {
+    expect(PUBLIC_EXPLANATION.toLowerCase()).toContain('simplified');
+    expect(PUBLIC_EXPLANATION.toLowerCase()).toContain('diffusion-inspired');
+  });
+
+  it('does not claim the AI is thinking', () => {
+    expect(PUBLIC_EXPLANATION.toLowerCase()).not.toContain('ai is thinking');
+    expect(PUBLIC_EXPLANATION.toLowerCase()).not.toContain('shows the ai thinking');
+  });
+
+  it('does not expose open free text in the default Open Day screen', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).not.toContain('contenteditable');
+  });
+
+  it('keeps advanced controls out of the first-view default', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('showAdvanced');
+    expect(appSource).toContain('Staff controls');
+  });
+
+  it('includes autoplay and changed-text highlighting hooks', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Autoplay');
+    expect(appSource).toContain('highlightedSegments');
+    expect(appSource).toContain('changed-word');
+  });
+
+  it('includes staff-only model-assisted mode copy', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Model-assisted');
+    expect(appSource).toContain('modelAssisted');
+  });
+
+  it('exposes a staff frame-count control for model draft frames', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Draft frames');
+    expect(appSource).toContain('v-model.number="steps"');
+  });
+
+  it('keeps custom prompt entry behind staff controls', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('Prompt source');
+    expect(appSource).toContain('Custom prompt');
+    expect(appSource).toContain('v-if="showAdvanced"');
+    expect(appSource).toContain('customPrompt');
+  });
+});
