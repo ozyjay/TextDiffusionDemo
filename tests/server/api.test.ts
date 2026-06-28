@@ -46,6 +46,29 @@ describe('Express API', () => {
     ]);
   });
 
+  it('streams refinement frames as server-sent events', async () => {
+    const response = await request(app)
+      .post('/api/refine/stream')
+      .send({
+        outputType: 'story',
+        promptId: 'robot-orientation-story',
+        style: 'clear',
+        creativity: 'balanced',
+        length: 'medium',
+        constraint: 'include-robot',
+        steps: 5,
+        streamDelayMs: 0
+      })
+      .expect(200)
+      .expect('Content-Type', /text\/event-stream/);
+
+    expect(response.text).toContain('event: frame');
+    expect(response.text).toContain('"index":0');
+    expect(response.text).toContain('"label":"Noise"');
+    expect(response.text).toContain('event: done');
+    expect(response.text).toContain('"mode":"scripted"');
+  });
+
   it('keeps story and Python prompt lanes separate', async () => {
     const response = await request(app)
       .post('/api/refine')

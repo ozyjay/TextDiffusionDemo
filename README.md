@@ -59,7 +59,7 @@ Then start the normal demo:
 ./scripts/dev.sh
 ```
 
-In the UI, open **Staff controls** and enable **Model-assisted**. The first request can take a little while while the backend starts:
+In the UI, use **Staff controls** to enable **Model-assisted**. The first request can take a little while while the backend starts:
 
 ```text
 .venv-diffusiongemma/bin/python -m diffusiongemma_adapter.worker
@@ -94,20 +94,22 @@ Direct one-off model smoke test:
 
 ## Staff Controls
 
-The default visitor flow uses curated prompt cards only. Staff controls add:
+The main screen exposes curated prompt cards, a staff-supervised custom prompt, and simple style/creativity/length/constraint controls. Staff controls add:
 
-- style, creativity, length, constraint, speed, and draft-frame controls;
+- replay and looping autoplay;
+- step and every-frame inspection modes;
 - optional **Model-assisted** mode;
-- staff-supervised custom story prompts, limited to short prompts and cleared on reset.
+- reduced motion and reset controls.
 
 Custom prompts are story-only in v1. They are not stored, and they still fall back to the selected curated card scaffold if the live model cannot respond.
 
 ## Scripts
 
 ```bash
-./scripts/dev.sh              # Start frontend and backend
-./scripts/open_day_mode.sh    # Start with fixed Open Day env and port checks
-./scripts/check_ports.sh      # Check reserved demo ports
+./scripts/dev.sh                 # Stop stale reserved-port processes, then start frontend and backend
+./scripts/open_day_mode.sh       # Start with fixed Open Day env after reserved-port cleanup
+./scripts/kill_reserved_ports.sh # Stop stale frontend/backend dev processes on reserved ports
+./scripts/check_ports.sh         # Check reserved demo ports
 ```
 
 PowerShell equivalents:

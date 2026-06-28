@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { PUBLIC_EXPLANATION } from './content/publicCopy';
-import { fetchPrompts, requestRefinement } from './services/api';
+import { fetchPrompts, requestRefinementStream } from './services/api';
 import { getNextAutoplaySelection, type AutoplaySelection } from './services/autoplay';
 import { buildHighlightedSegments } from './services/stageDiff';
+import { buildStageDisplay, formatStageText } from './services/stageLabels';
 import type {
   Creativity,
   Length,
   OutputType,
   PromptCard,
   RefineRequest,
-  RefinementStage,
   Trace
 } from '../../shared/types';
 
@@ -45,24 +45,24 @@ const activeIndex = ref(-1);
 const mode = ref('scripted');
 const isRunning = ref(false);
 const reducedMotion = ref(false);
-const showAdvanced = ref(false);
 const autoplayEnabled = ref(false);
 const modelAssisted = ref(false);
+const showDebugLabels = ref(false);
 const lastAutoplaySelection = ref<AutoplaySelection | null>(null);
+const viewMode = ref<'steps' | 'frames'>('steps');
 let timer: number | undefined;
 let autoplayTimer: number | undefined;
+let streamAbortController: AbortController | undefined;
 
 const filteredPrompts = computed(() =>
   prompts.value.filter((prompt) => prompt.outputType === outputType.value)
 );
 
-const visibleStages = computed<RefinementStage[]>(() =>
-  activeTrace.value ? activeTrace.value.stages.slice(0, activeIndex.value + 1) : []
-);
-
 const currentStage = computed(() =>
   activeTrace.value && activeIndex.value >= 0 ? activeTrace.value.stages[activeIndex.value] : null
 );
+
+const frameCount = computed(() => activeTrace.value?.stages.length ?? 0);
 
 const selectedPrompt = computed(() =>
   filteredPrompts.value.find((prompt) => prompt.id === selectedPromptId.value)
@@ -102,11 +102,26 @@ const canRunDemo = computed(() =>
 );
 
 const previousStageText = computed(() =>
-  activeTrace.value && activeIndex.value > 0 ? activeTrace.value.stages[activeIndex.value - 1].text : ''
+  activeTrace.value && activeIndex.value > 0
+    ? formatStageText(activeTrace.value.stages[activeIndex.value - 1].text, showDebugLabels.value)
+    : ''
 );
 
 const highlightedSegments = computed(() =>
-  currentStage.value ? buildHighlightedSegments(previousStageText.value, currentStage.value.text) : []
+  currentStage.value
+    ? buildHighlightedSegments(previousStageText.value, formatStageText(currentStage.value.text, showDebugLabels.value))
+    : []
+);
+
+const currentStageDisplay = computed(() =>
+  currentStage.value
+    ? buildStageDisplay(
+        currentStage.value,
+        activeIndex.value,
+        activeTrace.value?.stages.length ?? activeIndex.value + 1,
+        showDebugLabels.value
+      )
+    : null
 );
 
 onMounted(async () => {
@@ -117,9 +132,10 @@ onMounted(async () => {
 watch(outputType, () => {
   if (outputType.value !== 'story') {
     promptSource.value = 'cards';
+    customPrompt.value = '';
   }
   syncSelectedPrompt();
-  resetDemo();
+  clearCurrentRun();
 });
 
 watch(autoplayEnabled, (enabled) => {
@@ -146,6 +162,7 @@ async function runDemo(nextMode = 'scripted') {
   }
 
   clearTimer();
+  abortStream();
   clearAutoplayTimer();
   isRunning.value = true;
   const request: RefineRequest = {
@@ -156,19 +173,47 @@ async function runDemo(nextMode = 'scripted') {
     length: length.value,
     constraint: constraint.value,
     steps: steps.value,
+    streamDelayMs: reducedMotion.value ? Math.min(speed.value, 500) : speed.value,
+    includeEveryFrame: viewMode.value === 'frames',
     mode: usingCustomPrompt.value || modelAssisted.value ? 'model-assisted' : 'scripted'
   };
   if (usingCustomPrompt.value && customPromptValid.value) {
     request.customPrompt = trimmedCustomPrompt.value;
   }
 
-  const response = await requestRefinement({
-    ...request
-  });
-  activeTrace.value = response.trace;
-  mode.value = nextMode === 'replay' ? 'replay' : response.mode;
-  activeIndex.value = 0;
-  scheduleNextStage();
+  streamAbortController = new AbortController();
+  activeTrace.value = createStreamingTrace(request);
+  activeIndex.value = -1;
+  mode.value = nextMode === 'replay' ? 'replay' : 'streaming';
+
+  try {
+    const response = await requestRefinementStream(
+      { ...request },
+      (index, stage) => {
+        if (!activeTrace.value) {
+          activeTrace.value = createStreamingTrace(request);
+        }
+        activeTrace.value.stages[index] = stage;
+        activeIndex.value = index;
+      },
+      streamAbortController.signal
+    );
+    activeTrace.value = response.trace;
+    mode.value = nextMode === 'replay' ? 'replay' : response.mode;
+    activeIndex.value = Math.max(response.trace.stages.length - 1, 0);
+  } catch {
+    if (!streamAbortController.signal.aborted) {
+      isRunning.value = false;
+    }
+    return;
+  } finally {
+    streamAbortController = undefined;
+  }
+
+  isRunning.value = false;
+  if (autoplayEnabled.value) {
+    queueAutoplay(4500);
+  }
 }
 
 async function runAutoplayDemo() {
@@ -204,14 +249,26 @@ function scheduleNextStage() {
 }
 
 function resetDemo() {
-  clearTimer();
+  clearCurrentRun();
   clearAutoplayTimer();
   autoplayEnabled.value = false;
   customPrompt.value = '';
+}
+
+function clearCurrentRun() {
+  clearTimer();
+  abortStream();
   activeTrace.value = null;
   activeIndex.value = -1;
   isRunning.value = false;
   mode.value = 'scripted';
+}
+
+function abortStream() {
+  if (streamAbortController) {
+    streamAbortController.abort();
+    streamAbortController = undefined;
+  }
 }
 
 function clearTimer() {
@@ -248,6 +305,42 @@ function setPromptSource(source: 'cards' | 'custom') {
     modelAssisted.value = true;
   }
 }
+
+function selectPrompt(promptId: string) {
+  selectedPromptId.value = promptId;
+  promptSource.value = 'cards';
+}
+
+function selectStage(index: number) {
+  if (!activeTrace.value || index < 0 || index >= activeTrace.value.stages.length) {
+    return;
+  }
+  clearTimer();
+  isRunning.value = false;
+  activeIndex.value = index;
+}
+
+function selectFrame(event: Event) {
+  const input = event.target as HTMLInputElement;
+  selectStage(Number(input.value));
+}
+
+function createStreamingTrace(request: RefineRequest): Trace {
+  return {
+    id: `${request.promptId}-${request.style}-streaming`,
+    promptId: request.promptId,
+    outputType: request.outputType,
+    prompt: effectivePromptText.value,
+    style: request.style,
+    controls: {
+      creativity: request.creativity,
+      length: request.length,
+      constraint: request.constraint,
+      steps: request.steps
+    },
+    stages: []
+  };
+}
 </script>
 
 <template>
@@ -278,56 +371,158 @@ function setPromptSource(source: 'cards' | 'custom') {
         </button>
       </div>
 
-      <div class="prompt-strip">
-        <button
-          v-for="prompt in filteredPrompts"
-          :key="prompt.id"
-          class="prompt-card"
-          :class="{ selected: selectedPromptId === prompt.id }"
-          type="button"
-          @click="selectedPromptId = prompt.id"
-        >
-          <strong>{{ prompt.prompt }}</strong>
-          <span>{{ prompt.notes }}</span>
-        </button>
+      <div class="prompt-panel">
+        <div class="prompt-source" role="group" aria-label="Prompt source">
+          <button
+            type="button"
+            :class="{ selected: promptSource === 'cards' }"
+            @click="setPromptSource('cards')"
+          >
+            Prompt cards
+          </button>
+          <button
+            type="button"
+            :class="{ selected: promptSource === 'custom' }"
+            :disabled="!customPromptAvailable"
+            @click="setPromptSource('custom')"
+          >
+            Custom prompt
+          </button>
+        </div>
+        <label class="custom-prompt-field">
+          Custom prompt
+          <input
+            v-model="customPrompt"
+            maxlength="140"
+            minlength="8"
+            placeholder="A robot discovers a hidden campus garden."
+            type="text"
+            @focus="setPromptSource('custom')"
+          />
+          <span>{{ customPromptStatus }}</span>
+        </label>
+        <div class="prompt-strip">
+          <button
+            v-for="prompt in filteredPrompts"
+            :key="prompt.id"
+            class="prompt-card"
+            :class="{ selected: promptSource === 'cards' && selectedPromptId === prompt.id }"
+            type="button"
+            @click="selectPrompt(prompt.id)"
+          >
+            <strong>{{ prompt.prompt }}</strong>
+            <span>{{ prompt.notes }}</span>
+          </button>
+        </div>
       </div>
     </section>
 
-    <section class="run-bar" aria-label="Run controls">
-      <div>
+    <section class="control-board" aria-label="Demo controls">
+      <div class="selected-summary">
         <span class="label">Selected</span>
         <strong>{{ effectivePromptText }}</strong>
       </div>
-      <div class="button-row">
+
+      <label class="style-field">
+        Style
+        <select v-model="selectedStyle">
+          <option v-for="style in styles" :key="style" :value="style">
+            {{ style }}
+          </option>
+        </select>
+      </label>
+
+      <label>
+        Creativity
+        <select v-model="creativity">
+          <option value="safer">Safer</option>
+          <option value="balanced">Balanced</option>
+          <option value="surprising">Surprising</option>
+        </select>
+      </label>
+      <label>
+        Length
+        <select v-model="length">
+          <option value="short">Short</option>
+          <option value="medium">Medium</option>
+          <option value="detailed">Detailed</option>
+        </select>
+      </label>
+      <label>
+        Constraint
+        <select v-model="constraint">
+          <option v-for="item in constraints" :key="item.id" :value="item.id">
+            {{ item.label }}
+          </option>
+        </select>
+      </label>
+      <label>
+        <span class="range-label">
+          Steps
+          <strong>{{ steps }}</strong>
+        </span>
+        <input v-model.number="steps" min="3" max="8" step="1" type="range" />
+      </label>
+      <label>
+        Speed
+        <input v-model.number="speed" min="1000" max="3200" step="100" type="range" />
+      </label>
+
+      <div class="button-row primary-actions">
         <button class="primary" type="button" :disabled="!canRunDemo" @click="runDemo()">Diffuse Text</button>
-        <button type="button" @click="runDemo('replay')">Replay</button>
-        <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
-          Autoplay
-        </button>
-        <button type="button" @click="resetDemo">Reset</button>
       </div>
     </section>
 
-    <section class="stage-view" aria-label="Current staged refinement">
-      <aside class="stage-list">
-        <h2>Refinement passes</h2>
+    <section
+      class="stage-view"
+      :class="{ 'frame-view': viewMode === 'frames' }"
+      aria-label="Current staged refinement"
+    >
+      <aside v-if="viewMode === 'steps'" class="stage-list">
+        <h2>Steps</h2>
         <ol>
           <li
             v-for="(stage, index) in activeTrace?.stages ?? []"
             :key="`${stage.label}-${index}`"
             :class="{ visible: index <= activeIndex, current: index === activeIndex }"
           >
-            <span>Step {{ index }}</span>
-            {{ stage.label }}
+            <button type="button" @click="selectStage(index)">
+              <span>{{ buildStageDisplay(stage, index, activeTrace?.stages.length ?? index + 1, showDebugLabels).stepText }}</span>
+              <strong>{{ buildStageDisplay(stage, index, activeTrace?.stages.length ?? index + 1, showDebugLabels).label }}</strong>
+              <small>{{ buildStageDisplay(stage, index, activeTrace?.stages.length ?? index + 1, showDebugLabels).detail }}</small>
+            </button>
           </li>
         </ol>
       </aside>
 
       <article class="page-output" :class="{ code: outputType === 'python' }">
+        <div v-if="viewMode === 'frames'" class="frame-slider">
+          <label>
+            <span class="range-label">
+              Frame
+              <strong>{{ frameCount > 0 ? activeIndex + 1 : 0 }} / {{ frameCount }}</strong>
+            </span>
+            <input
+              :value="activeIndex"
+              :disabled="!activeTrace"
+              :max="Math.max(frameCount - 1, 0)"
+              min="0"
+              step="1"
+              type="range"
+              @input="selectFrame"
+            />
+          </label>
+        </div>
         <template v-if="currentStage">
-          <div class="page-heading">
-            <span>Step {{ activeIndex }} - {{ currentStage.label }}</span>
+          <div v-if="currentStageDisplay" class="page-heading">
+            <span>{{ currentStageDisplay.stepText }} - {{ currentStageDisplay.label }}</span>
             <strong>{{ currentStage.note }}</strong>
+            <small>
+              {{ currentStageDisplay.detail }}
+            </small>
+            <small v-if="showDebugLabels && currentStageDisplay.debugText" class="debug-detail">
+              Raw frame: {{ currentStage.label }} · {{ currentStageDisplay.debugText }}
+            </small>
           </div>
           <pre v-if="outputType === 'python'"><template
             v-for="(segment, index) in highlightedSegments"
@@ -345,96 +540,33 @@ function setPromptSource(source: 'cards' | 'custom') {
       </article>
     </section>
 
-    <section class="advanced">
-      <button class="advanced-toggle" type="button" @click="showAdvanced = !showAdvanced">
-        Staff controls
-      </button>
-      <div v-if="showAdvanced" class="advanced-panel">
-        <div class="prompt-source" role="group" aria-label="Prompt source">
-          <span>Prompt source</span>
-          <button
-            type="button"
-            :class="{ selected: promptSource === 'cards' }"
-            @click="setPromptSource('cards')"
-          >
-            Prompt cards
-          </button>
-          <button
-            type="button"
-            :class="{ selected: promptSource === 'custom' }"
-            :disabled="!customPromptAvailable"
-            @click="setPromptSource('custom')"
-          >
-            Custom prompt
-          </button>
-        </div>
-        <label v-if="usingCustomPrompt" class="custom-prompt-field">
-          Custom prompt
-          <input
-            v-model="customPrompt"
-            maxlength="140"
-            minlength="8"
-            placeholder="A robot discovers a hidden campus garden."
-            type="text"
-          />
-          <span>{{ customPromptStatus }}</span>
-        </label>
-        <div class="style-buttons" role="group" aria-label="Style">
-          <span>Style</span>
-          <button
-            v-for="style in styles"
-            :key="style"
-            :class="{ selected: selectedStyle === style }"
-            type="button"
-            @click="selectedStyle = style"
-          >
-            {{ style }}
-          </button>
-        </div>
-        <label>
-          Creativity
-          <select v-model="creativity">
-            <option value="safer">Safer</option>
-            <option value="balanced">Balanced</option>
-            <option value="surprising">Surprising</option>
-          </select>
-        </label>
-        <label>
-          Length
-          <select v-model="length">
-            <option value="short">Short</option>
-            <option value="medium">Medium</option>
-            <option value="detailed">Detailed</option>
-          </select>
-        </label>
-        <label>
-          Constraint
-          <select v-model="constraint">
-            <option v-for="item in constraints" :key="item.id" :value="item.id">
-              {{ item.label }}
-            </option>
-          </select>
-        </label>
-        <label>
-          Speed
-          <input v-model.number="speed" min="1000" max="3200" step="100" type="range" />
-        </label>
-        <label>
-          <span class="range-label">
-            Draft frames
-            <strong>{{ steps }}</strong>
-          </span>
-          <input v-model.number="steps" min="3" max="8" step="1" type="range" />
-        </label>
-        <label class="checkbox-line">
-          <input v-model="modelAssisted" :disabled="usingCustomPrompt" type="checkbox" />
-          Model-assisted
-        </label>
-        <label class="checkbox-line">
-          <input v-model="reducedMotion" type="checkbox" />
-          Reduced motion
-        </label>
+    <section class="staff-controls" aria-label="Staff controls">
+      <span class="label">Staff controls</span>
+      <div class="button-row">
+        <button type="button" @click="runDemo('replay')">Replay</button>
+        <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
+          Autoplay loop
+        </button>
+        <button type="button" :class="{ selected: viewMode === 'steps' }" @click="viewMode = 'steps'">
+          Steps
+        </button>
+        <button type="button" :class="{ selected: viewMode === 'frames' }" @click="viewMode = 'frames'">
+          Every frame
+        </button>
+        <button type="button" @click="resetDemo">Reset</button>
       </div>
+      <label class="checkbox-line">
+        <input v-model="modelAssisted" :disabled="usingCustomPrompt" type="checkbox" />
+        Model-assisted
+      </label>
+      <label class="checkbox-line">
+        <input v-model="reducedMotion" type="checkbox" />
+        Reduced motion
+      </label>
+      <label class="checkbox-line">
+        <input v-model="showDebugLabels" type="checkbox" />
+        Debug labels
+      </label>
     </section>
 
     <footer class="explanation">

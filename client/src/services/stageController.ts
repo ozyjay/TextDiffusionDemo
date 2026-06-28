@@ -3,6 +3,7 @@ import type { RefinementStage, Trace } from '../../../shared/types';
 export interface StageController {
   load(trace: Trace): void;
   advance(): boolean;
+  select(index: number): boolean;
   reset(): void;
   currentTrace(): Trace | null;
   currentStage(): RefinementStage | null;
@@ -23,6 +24,13 @@ export function createStageController(): StageController {
         return false;
       }
       index += 1;
+      return true;
+    },
+    select(nextIndex: number) {
+      if (!trace || nextIndex < 0 || nextIndex >= trace.stages.length) {
+        return false;
+      }
+      index = nextIndex;
       return true;
     },
     reset() {

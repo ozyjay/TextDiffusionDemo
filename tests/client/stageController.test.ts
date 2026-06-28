@@ -38,6 +38,18 @@ describe('stage controller', () => {
     expect(visited).toEqual(['Mask 0/8', 'Denoise 2/8', 'Denoise 4/8', 'Final']);
   });
 
+  it('selects a visible stage by index', () => {
+    const controller = createStageController();
+
+    controller.load(getLocalTraces()[0]);
+
+    expect(controller.select(3)).toBe(true);
+    expect(controller.currentIndex()).toBe(3);
+    expect(controller.currentStage()?.label).toBe('Styled');
+    expect(controller.select(99)).toBe(false);
+    expect(controller.currentIndex()).toBe(3);
+  });
+
   it('clears visitor-visible state on reset', () => {
     const controller = createStageController();
 

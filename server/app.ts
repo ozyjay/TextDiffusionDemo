@@ -1,4 +1,5 @@
 import express from 'express';
+import type { Response } from 'express';
 import {
   getPrompts,
   getTraces,
@@ -22,6 +23,11 @@ export interface AppOptions {
   modelAdapterTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   modelTraceProvider?: ModelTraceProvider;
+}
+
+interface RefinementResult {
+  mode: 'scripted' | 'template' | 'model-assisted' | 'model-fallback';
+  trace: Trace;
 }
 
 export function createApp(options: AppOptions = {}) {
@@ -48,55 +54,123 @@ export function createApp(options: AppOptions = {}) {
 
   app.post('/api/refine', async (request, response) => {
     const body = request.body as Partial<RefineRequest>;
-    if (!body.promptId || !body.style) {
+    const refineRequest = buildRefineRequest(body);
+    if (!refineRequest) {
       response.status(400).json({ error: 'promptId and style are required.' });
       return;
     }
 
-    const refineRequest: RefineRequest = {
-      outputType: body.outputType ?? 'story',
-      promptId: body.promptId,
-      style: body.style,
-      creativity: body.creativity ?? 'balanced',
-      length: body.length ?? 'medium',
-      constraint: body.constraint ?? 'none',
-      steps: body.steps ?? 5,
-      mode: body.mode ?? 'scripted',
-      customPrompt: typeof body.customPrompt === 'string' ? body.customPrompt : undefined
-    };
+    response.json(await resolveRefinement(refineRequest, options));
+  });
 
-    const customPrompt = refineRequest.mode === 'model-assisted'
-      ? normaliseCustomPrompt(refineRequest)
-      : null;
-    const seedTrace = customPrompt
-      ? { ...refineTrace(refineRequest), prompt: customPrompt }
-      : refineTrace(refineRequest);
-    if (refineRequest.mode === 'model-assisted') {
-      if (refineRequest.outputType !== 'story') {
-        response.json({ mode: 'model-fallback', trace: seedTrace });
-        return;
-      }
-
-      const modelTrace = await requestModelTrace(refineRequest, seedTrace, {
-        adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
-        fetchImpl: options.fetchImpl,
-        timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
-        modelTraceProvider: options.modelTraceProvider
-      });
-
-      if (modelTrace) {
-        response.json({ mode: 'model-assisted', trace: modelTrace });
-        return;
-      }
-
-      response.json({ mode: 'model-fallback', trace: seedTrace });
+  app.post('/api/refine/stream', async (request, response) => {
+    const refineRequest = buildRefineRequest(request.body as Partial<RefineRequest>);
+    if (!refineRequest) {
+      response.status(400).json({ error: 'promptId and style are required.' });
       return;
     }
 
-    response.json({ mode: seedTrace.id.endsWith('-template') ? 'template' : 'scripted', trace: seedTrace });
+    response.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
+    writeSse(response, 'ready', { ok: true });
+
+    try {
+      const result = await resolveRefinement(refineRequest, options);
+      const delayMs = clampDelay(refineRequest.streamDelayMs);
+      for (const [index, stage] of result.trace.stages.entries()) {
+        writeSse(response, 'frame', { index, stage });
+        if (delayMs > 0 && index < result.trace.stages.length - 1) {
+          await sleep(delayMs);
+        }
+      }
+      writeSse(response, 'done', result);
+      response.end();
+    } catch (error) {
+      writeSse(response, 'error', {
+        message: error instanceof Error ? error.message : 'Refinement stream failed.'
+      });
+      response.end();
+    }
   });
 
   return app;
+}
+
+function buildRefineRequest(body: Partial<RefineRequest>): RefineRequest | null {
+  if (!body.promptId || !body.style) {
+    return null;
+  }
+
+  return {
+    outputType: body.outputType ?? 'story',
+    promptId: body.promptId,
+    style: body.style,
+    creativity: body.creativity ?? 'balanced',
+    length: body.length ?? 'medium',
+    constraint: body.constraint ?? 'none',
+    steps: body.steps ?? 5,
+    streamDelayMs: typeof body.streamDelayMs === 'number' ? body.streamDelayMs : undefined,
+    includeEveryFrame: body.includeEveryFrame === true,
+    mode: body.mode ?? 'scripted',
+    customPrompt: typeof body.customPrompt === 'string' ? body.customPrompt : undefined
+  };
+}
+
+async function resolveRefinement(
+  refineRequest: RefineRequest,
+  options: AppOptions
+): Promise<RefinementResult> {
+  const customPrompt = refineRequest.mode === 'model-assisted'
+    ? normaliseCustomPrompt(refineRequest)
+    : null;
+  const seedTrace = customPrompt
+    ? { ...refineTrace(refineRequest), prompt: customPrompt }
+    : refineTrace(refineRequest);
+
+  if (refineRequest.mode === 'model-assisted') {
+    if (refineRequest.outputType !== 'story') {
+      return { mode: 'model-fallback', trace: seedTrace };
+    }
+
+    const modelTrace = await requestModelTrace(refineRequest, seedTrace, {
+      adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
+      fetchImpl: options.fetchImpl,
+      timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
+      modelTraceProvider: options.modelTraceProvider
+    });
+
+    if (modelTrace) {
+      return { mode: 'model-assisted', trace: modelTrace };
+    }
+
+    return { mode: 'model-fallback', trace: seedTrace };
+  }
+
+  return {
+    mode: seedTrace.id.endsWith('-template') ? 'template' : 'scripted',
+    trace: seedTrace
+  };
+}
+
+function writeSse(response: Response, event: string, data: unknown): void {
+  response.write(`event: ${event}\n`);
+  response.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+function clampDelay(value: number | undefined): number {
+  if (!Number.isFinite(value) || value === undefined) {
+    return 250;
+  }
+  return Math.max(0, Math.min(value, 3200));
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 export function normaliseCustomPrompt(request: Pick<RefineRequest, 'outputType' | 'customPrompt'>): string | null {

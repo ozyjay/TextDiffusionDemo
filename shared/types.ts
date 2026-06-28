@@ -41,6 +41,8 @@ export interface RefineRequest {
   length: Length;
   constraint: string;
   steps: number;
+  streamDelayMs?: number;
+  includeEveryFrame?: boolean;
   mode?: 'scripted' | 'model-assisted';
   customPrompt?: string;
 }

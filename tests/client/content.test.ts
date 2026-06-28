@@ -20,11 +20,12 @@ describe('public copy', () => {
     expect(appSource).not.toContain('contenteditable');
   });
 
-  it('keeps advanced controls out of the first-view default', () => {
+  it('keeps staff controls separate from first-class visitor controls', () => {
     const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
 
-    expect(appSource).toContain('showAdvanced');
     expect(appSource).toContain('Staff controls');
+    expect(appSource).toContain('aria-label="Demo controls"');
+    expect(appSource).toContain('aria-label="Staff controls"');
   });
 
   it('includes autoplay and changed-text highlighting hooks', () => {
@@ -35,6 +36,23 @@ describe('public copy', () => {
     expect(appSource).toContain('changed-word');
   });
 
+  it('uses the streaming refinement API for demo runs', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+    const apiSource = readFileSync(resolve(process.cwd(), 'client/src/services/api.ts'), 'utf8');
+
+    expect(appSource).toContain('requestRefinementStream');
+    expect(apiSource).toContain('/api/refine/stream');
+    expect(apiSource).toContain('event === \'frame\'');
+  });
+
+  it('keeps raw model frame labels behind a staff debug toggle', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(appSource).toContain('showDebugLabels');
+    expect(appSource).toContain('Debug labels');
+    expect(appSource).toContain('buildStageDisplay');
+  });
+
   it('includes staff-only model-assisted mode copy', () => {
     const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
 
@@ -42,19 +60,22 @@ describe('public copy', () => {
     expect(appSource).toContain('modelAssisted');
   });
 
-  it('exposes a staff frame-count control for model draft frames', () => {
+  it('exposes draft step and every-frame inspection controls', () => {
     const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
 
-    expect(appSource).toContain('Draft frames');
+    expect(appSource).toContain('Every frame');
+    expect(appSource).toContain('viewMode');
+    expect(appSource).toContain('Frame');
+    expect(appSource).toContain("includeEveryFrame: viewMode.value === 'frames'");
     expect(appSource).toContain('v-model.number="steps"');
   });
 
-  it('keeps custom prompt entry behind staff controls', () => {
+  it('makes custom prompt entry a first-class prompt option', () => {
     const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
 
     expect(appSource).toContain('Prompt source');
     expect(appSource).toContain('Custom prompt');
-    expect(appSource).toContain('v-if="showAdvanced"');
+    expect(appSource).toContain('prompt-panel');
     expect(appSource).toContain('customPrompt');
   });
 });

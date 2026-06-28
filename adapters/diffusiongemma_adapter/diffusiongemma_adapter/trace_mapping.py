@@ -33,8 +33,10 @@ def build_trace_from_snapshots(
     seed_trace: dict[str, Any],
     snapshots: list[dict[str, str]],
     final_text: str,
+    *,
+    preserve_duplicate_frames: bool = False,
 ) -> dict[str, Any]:
-    cleaned_snapshots = clean_snapshots(snapshots)
+    cleaned_snapshots = clean_snapshots(snapshots, preserve_duplicate_frames=preserve_duplicate_frames)
     cleaned_final = clean_generated_text(final_text)
     if not cleaned_snapshots:
         raise ValueError("DiffusionGemma did not return usable draft frames.")
@@ -64,13 +66,19 @@ def build_trace_from_snapshots(
     }
 
 
-def clean_snapshots(snapshots: list[dict[str, str]]) -> list[dict[str, str]]:
+def clean_snapshots(
+    snapshots: list[dict[str, str]],
+    *,
+    preserve_duplicate_frames: bool = False,
+) -> list[dict[str, str]]:
     cleaned: list[dict[str, str]] = []
     seen_texts: set[str] = set()
     for snapshot in snapshots:
         text = clean_generated_text(str(snapshot.get("text", "")))
         label = str(snapshot.get("label", "")).strip()
-        if not text or not label or text in seen_texts:
+        if not text or not label:
+            continue
+        if not preserve_duplicate_frames and text in seen_texts:
             continue
         seen_texts.add(text)
         cleaned.append({"label": label, "text": text})

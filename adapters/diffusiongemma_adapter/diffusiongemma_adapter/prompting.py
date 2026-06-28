@@ -40,13 +40,14 @@ def build_generation_options(request: dict[str, Any]) -> GenerationOptions:
     creativity = str(request.get("creativity", "balanced"))
     requested_steps = max(1, int(request.get("steps", 5)))
     denoising_steps = bounded_int(requested_steps * 4, minimum=8, maximum=32)
+    include_every_frame = bool(request.get("includeEveryFrame", False))
 
     return GenerationOptions(
         max_tokens=160 if length == "detailed" else 96,
         max_denoising_steps=denoising_steps,
         block_length=32,
         temperature=0.2 if creativity == "surprising" else 0.0,
-        diffusion_unmasking_interval=max(1, denoising_steps // requested_steps),
+        diffusion_unmasking_interval=1 if include_every_frame else max(1, denoising_steps // requested_steps),
     )
 
 

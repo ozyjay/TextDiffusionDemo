@@ -6,11 +6,27 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Get-ListeningProcessIds {
+    param([int]$Port)
+
+    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+        $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+        return @($connection | ForEach-Object { $_.OwningProcess } | Sort-Object -Unique)
+    }
+
+    if (Get-Command lsof -ErrorAction SilentlyContinue) {
+        $output = & lsof -tiTCP:$Port -sTCP:LISTEN 2>$null
+        return @($output | Where-Object { $_ } | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+    }
+
+    throw "Cannot inspect port $Port because neither Get-NetTCPConnection nor lsof is available."
+}
+
 function Test-PortAvailable {
     param([int]$Port)
 
-    $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if ($connection) {
+    $processIds = Get-ListeningProcessIds -Port $Port
+    if ($processIds) {
         throw "Port $Port is already in use."
     }
     Write-Host "Port $Port is available."

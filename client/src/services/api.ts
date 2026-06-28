@@ -1,4 +1,4 @@
-import type { PromptCard, RefineRequest, Trace } from '../../../shared/types';
+import type { PromptCard, RefineRequest, RefinementStage, Trace } from '../../../shared/types';
 import { getLocalPrompts, getLocalTraces } from './localTraceStore';
 
 export async function fetchPrompts(): Promise<PromptCard[]> {
@@ -41,4 +41,96 @@ export async function requestRefinement(request: RefineRequest): Promise<{ mode:
 
     return { mode: request.mode === 'model-assisted' ? 'model-fallback' : 'replay', trace: fallback };
   }
+}
+
+export async function requestRefinementStream(
+  request: RefineRequest,
+  onFrame: (index: number, stage: RefinementStage) => void,
+  signal?: AbortSignal
+): Promise<{ mode: string; trace: Trace }> {
+  try {
+    const response = await fetch('/api/refine/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal
+    });
+    if (!response.ok || !response.body) {
+      throw new Error('Refinement stream unavailable.');
+    }
+
+    return await readRefinementStream(response, onFrame);
+  } catch {
+    if (signal?.aborted) {
+      throw new Error('Refinement stream aborted.');
+    }
+    const fallback = await requestRefinement(request);
+    fallback.trace.stages.forEach((stage, index) => onFrame(index, stage));
+    return fallback;
+  }
+}
+
+async function readRefinementStream(
+  response: Response,
+  onFrame: (index: number, stage: RefinementStage) => void
+): Promise<{ mode: string; trace: Trace }> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new Error('Refinement stream did not include a readable body.');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: { mode: string; trace: Trace } | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (value) {
+      buffer += decoder.decode(value, { stream: !done });
+      const parsed = parseSseBuffer(buffer);
+      buffer = parsed.remainder;
+      for (const message of parsed.messages) {
+        if (message.event === 'frame') {
+          const frame = JSON.parse(message.data) as { index: number; stage: RefinementStage };
+          onFrame(frame.index, frame.stage);
+        }
+        if (message.event === 'done') {
+          result = JSON.parse(message.data) as { mode: string; trace: Trace };
+        }
+        if (message.event === 'error') {
+          throw new Error(message.data);
+        }
+      }
+    }
+    if (done) {
+      break;
+    }
+  }
+
+  if (!result) {
+    throw new Error('Refinement stream ended before the final trace arrived.');
+  }
+
+  return result;
+}
+
+function parseSseBuffer(buffer: string): {
+  messages: Array<{ event: string; data: string }>;
+  remainder: string;
+} {
+  const chunks = buffer.split('\n\n');
+  const remainder = chunks.pop() ?? '';
+  const messages = chunks
+    .map((chunk) => {
+      const event = chunk.match(/^event: (.+)$/m)?.[1] ?? 'message';
+      const data = chunk
+        .split('\n')
+        .filter((line) => line.startsWith('data: '))
+        .map((line) => line.slice(6))
+        .join('\n');
+      return { event, data };
+    })
+    .filter((message) => message.data.length > 0);
+
+  return { messages, remainder };
 }

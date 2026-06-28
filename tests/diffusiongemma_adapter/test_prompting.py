@@ -68,6 +68,19 @@ class PromptingTests(unittest.TestCase):
         self.assertEqual(options.max_denoising_steps, 24)
         self.assertEqual(options.diffusion_unmasking_interval, 4)
 
+    def test_generation_options_can_request_every_internal_frame(self):
+        request = {
+            "creativity": "balanced",
+            "length": "short",
+            "steps": 6,
+            "includeEveryFrame": True,
+        }
+
+        options = build_generation_options(request)
+
+        self.assertEqual(options.max_denoising_steps, 24)
+        self.assertEqual(options.diffusion_unmasking_interval, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

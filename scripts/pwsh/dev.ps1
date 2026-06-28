@@ -16,4 +16,5 @@ Write-Host "Starting Text Diffusion Lab..."
 Write-Host "Frontend: http://$FrontendHost`:$FrontendPort/"
 Write-Host "Backend:  http://$BackendHost`:$BackendPort/"
 
+& "$PSScriptRoot\stop-reserved-ports.ps1" -FrontendPort $FrontendPort -BackendPort $BackendPort
 npm run dev

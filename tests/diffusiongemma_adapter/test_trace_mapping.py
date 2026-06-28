@@ -102,6 +102,42 @@ class TraceMappingTests(unittest.TestCase):
         ])
         self.assertEqual(trace["stages"][-1]["text"], "The robot waved at orientation.")
 
+    def test_build_trace_from_snapshots_can_preserve_every_denoising_frame(self):
+        seed_trace = {
+            "id": "robot-orientation-story-clear",
+            "promptId": "robot-orientation-story",
+            "outputType": "story",
+            "prompt": "A robot joins university orientation.",
+            "style": "clear",
+            "controls": {},
+            "stages": [
+                {"label": "Noise", "text": "noise", "note": "noise note"},
+                {"label": "Rough", "text": "rough", "note": "rough note"},
+                {"label": "Clear", "text": "clear", "note": "clear note"},
+                {"label": "Styled", "text": "styled", "note": "styled note"},
+                {"label": "Final", "text": "scripted final", "note": "old note"},
+            ],
+        }
+        snapshots = [
+            {"label": "Mask 0/8", "text": "[Mask] [Mask]"},
+            {"label": "Denoise 1/8", "text": "The robot [Mask]"},
+            {"label": "Denoise 2/8", "text": "The robot [Mask]"},
+        ]
+
+        trace = build_trace_from_snapshots(
+            seed_trace,
+            snapshots,
+            "The robot waved at orientation.",
+            preserve_duplicate_frames=True,
+        )
+
+        self.assertEqual([stage["label"] for stage in trace["stages"]], [
+            "Mask 0/8",
+            "Denoise 1/8",
+            "Denoise 2/8",
+            "Final",
+        ])
+
 
 if __name__ == "__main__":
     unittest.main()

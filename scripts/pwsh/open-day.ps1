@@ -7,7 +7,7 @@ $env:FRONTEND_PORT = "3300"
 $env:BACKEND_HOST = "127.0.0.1"
 $env:BACKEND_PORT = "8300"
 
-& "$PSScriptRoot\smoke.ps1" -CheckPortsOnly
+& "$PSScriptRoot\stop-reserved-ports.ps1" -FrontendPort 3300 -BackendPort 8300
 
 Write-Host "Starting Open Day mode on fixed ports."
 npm run dev
