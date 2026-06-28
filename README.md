@@ -72,10 +72,17 @@ Useful environment overrides:
 ```bash
 DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
 DIFFUSIONGEMMA_MODEL=mlx-community/diffusiongemma-26B-A4B-it-4bit
+MODEL_PROVIDER=auto
 MODEL_ADAPTER_TIMEOUT_MS=30000
 ```
 
-`MODEL_ADAPTER_URL` is still supported as a legacy third-party adapter escape hatch. If it is set, Express posts to `POST <MODEL_ADAPTER_URL>/api/refine` instead of starting the managed worker. For the built-in worker path, leave `MODEL_ADAPTER_URL` unset.
+`MODEL_PROVIDER` can be `auto`, `external-adapter`, or `mlx-diffusiongemma`. In `auto` mode, the backend tries a configured external adapter first, then the managed MLX DiffusionGemma worker, then falls back safely. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `POST <MODEL_ADAPTER_URL>/api/refine`.
+
+Provider diagnostics are available for staff/debug tooling:
+
+```bash
+curl http://127.0.0.1:8300/api/model-providers
+```
 
 Direct one-off model smoke test:
 

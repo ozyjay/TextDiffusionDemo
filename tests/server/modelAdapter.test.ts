@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requestModelTrace } from '../../server/services/modelAdapter';
+import { getModelProviderDiagnostics, requestModelTrace } from '../../server/services/modelAdapter';
 import { refineTrace } from '../../server/services/traceService';
 import type { RefineRequest } from '../../shared/types';
 
@@ -88,5 +88,87 @@ describe('model adapter', () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it('honours explicit external adapter provider selection', async () => {
+    const seedTrace = refineTrace(request);
+    const modelTrace = { ...seedTrace, id: 'robot-orientation-story-external' };
+    let externalCalls = 0;
+    let workerCalls = 0;
+
+    const result = await requestModelTrace(request, seedTrace, {
+      adapterUrl: 'http://127.0.0.1:8600',
+      providerSelection: 'external-adapter',
+      fetchImpl: async () => {
+        externalCalls += 1;
+        return new Response(JSON.stringify({ trace: modelTrace }), { status: 200 });
+      },
+      modelTraceProvider: async () => {
+        workerCalls += 1;
+        return null;
+      },
+      timeoutMs: 50
+    });
+
+    expect(result?.id).toBe('robot-orientation-story-external');
+    expect(externalCalls).toBe(1);
+    expect(workerCalls).toBe(0);
+  });
+
+  it('honours explicit MLX provider selection without calling the external adapter', async () => {
+    const seedTrace = refineTrace(request);
+    const modelTrace = { ...seedTrace, id: 'robot-orientation-story-mlx' };
+    let externalCalls = 0;
+
+    const result = await requestModelTrace(request, seedTrace, {
+      adapterUrl: 'http://127.0.0.1:8600',
+      providerSelection: 'mlx-diffusiongemma',
+      fetchImpl: async () => {
+        externalCalls += 1;
+        return new Response('{}');
+      },
+      modelTraceProvider: async () => modelTrace,
+      timeoutMs: 50
+    });
+
+    expect(result?.id).toBe('robot-orientation-story-mlx');
+    expect(externalCalls).toBe(0);
+  });
+
+  it('uses auto priority and falls through invalid external output to MLX', async () => {
+    const seedTrace = refineTrace(request);
+    const modelTrace = { ...seedTrace, id: 'robot-orientation-story-mlx' };
+    let workerCalls = 0;
+
+    const result = await requestModelTrace(request, seedTrace, {
+      adapterUrl: 'http://127.0.0.1:8600',
+      providerSelection: 'auto',
+      fetchImpl: async () => new Response(JSON.stringify({ trace: { ...seedTrace, outputType: 'python' } }), { status: 200 }),
+      modelTraceProvider: async () => {
+        workerCalls += 1;
+        return modelTrace;
+      },
+      timeoutMs: 50
+    });
+
+    expect(result?.id).toBe('robot-orientation-story-mlx');
+    expect(workerCalls).toBe(1);
+  });
+
+  it('reports provider diagnostics without exposing adapter URLs', async () => {
+    const diagnostics = await getModelProviderDiagnostics({
+      adapterUrl: 'http://secret-host.example:8600/private',
+      providerSelection: 'auto',
+      modelTraceProvider: async () => null,
+      timeoutMs: 50
+    });
+
+    expect(diagnostics.providerSelection).toBe('auto');
+    expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
+      'external-adapter',
+      'mlx-diffusiongemma',
+      'fallback'
+    ]);
+    expect(JSON.stringify(diagnostics)).not.toContain('secret-host');
   });
 });

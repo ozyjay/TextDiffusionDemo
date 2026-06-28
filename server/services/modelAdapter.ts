@@ -1,6 +1,12 @@
 import type { RefineRequest, Trace } from '../../shared/types';
-import { validateTrace } from './traceService';
-import { requestDiffusionGemmaTrace } from './diffusionGemmaWorker';
+import { ExternalAdapterProvider } from './modelProviders/externalAdapterProvider';
+import { FallbackProvider } from './modelProviders/fallbackProvider';
+import { MlxDiffusionGemmaProvider, type WorkerTraceProvider } from './modelProviders/mlxDiffusionGemmaProvider';
+import {
+  getProviderDiagnostics,
+  resolveModelTrace
+} from './modelProviders/resolver';
+import type { ModelTraceProviderStrategy, ProviderDiagnostics } from './modelProviders/types';
 
 type FetchLike = typeof fetch;
 
@@ -8,7 +14,9 @@ export interface ModelAdapterOptions {
   adapterUrl?: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
-  modelTraceProvider?: (request: RefineRequest, seedTrace: Trace, timeoutMs: number) => Promise<Trace | null>;
+  providerSelection?: string;
+  modelTraceProvider?: WorkerTraceProvider;
+  providers?: ModelTraceProviderStrategy[];
 }
 
 export async function requestModelTrace(
@@ -16,59 +24,24 @@ export async function requestModelTrace(
   seedTrace: Trace,
   options: ModelAdapterOptions = {}
 ): Promise<Trace | null> {
-  const adapterUrl = options.adapterUrl?.trim();
-  if (!adapterUrl) {
-    const provider = options.modelTraceProvider ?? requestDiffusionGemmaTrace;
-    return provider(request, seedTrace, options.timeoutMs ?? 30000);
-  }
-
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 30000);
-
-  try {
-    const response = await fetchImpl(`${adapterUrl.replace(/\/$/, '')}/api/refine`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request, seedTrace }),
-      signal: controller.signal
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = (await response.json()) as unknown;
-    const trace = extractTrace(data);
-    if (!trace) {
-      return null;
-    }
-
-    const validated = validateTrace(trace);
-    if (validated.promptId !== request.promptId || validated.outputType !== request.outputType) {
-      return null;
-    }
-
-    return validated;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const providers = options.providers ?? createDefaultProviders(options);
+  return resolveModelTrace(request, seedTrace, providers, {
+    selection: options.providerSelection ?? process.env.MODEL_PROVIDER,
+    timeoutMs: options.timeoutMs ?? 30000
+  });
 }
 
-function extractTrace(data: unknown): Trace | null {
-  if (!isRecord(data)) {
-    return null;
-  }
-
-  if ('trace' in data) {
-    return isRecord(data.trace) ? data.trace as unknown as Trace : null;
-  }
-
-  return data as unknown as Trace;
+export async function getModelProviderDiagnostics(
+  options: ModelAdapterOptions = {}
+): Promise<ProviderDiagnostics> {
+  const providers = options.providers ?? createDefaultProviders(options);
+  return getProviderDiagnostics(providers, options.providerSelection ?? process.env.MODEL_PROVIDER);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+function createDefaultProviders(options: ModelAdapterOptions): ModelTraceProviderStrategy[] {
+  return [
+    new ExternalAdapterProvider(options.adapterUrl ?? process.env.MODEL_ADAPTER_URL, options.fetchImpl),
+    new MlxDiffusionGemmaProvider(options.modelTraceProvider),
+    new FallbackProvider()
+  ];
 }

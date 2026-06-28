@@ -5,7 +5,7 @@ import {
   getTraces,
   refineTrace
 } from './services/traceService';
-import { requestModelTrace } from './services/modelAdapter';
+import { getModelProviderDiagnostics, requestModelTrace } from './services/modelAdapter';
 import type { RefineRequest } from '../shared/types';
 import type { Trace } from '../shared/types';
 
@@ -21,6 +21,7 @@ export type ModelTraceProvider = (
 export interface AppOptions {
   modelAdapterUrl?: string;
   modelAdapterTimeoutMs?: number;
+  modelProvider?: string;
   fetchImpl?: typeof fetch;
   modelTraceProvider?: ModelTraceProvider;
 }
@@ -50,6 +51,16 @@ export function createApp(options: AppOptions = {}) {
 
   app.get('/api/traces', (_request, response) => {
     response.json({ traces: getTraces() });
+  });
+
+  app.get('/api/model-providers', async (_request, response) => {
+    response.json(await getModelProviderDiagnostics({
+      adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
+      fetchImpl: options.fetchImpl,
+      timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
+      providerSelection: options.modelProvider ?? process.env.MODEL_PROVIDER,
+      modelTraceProvider: options.modelTraceProvider
+    }));
   });
 
   app.post('/api/refine', async (request, response) => {
@@ -141,6 +152,7 @@ async function resolveRefinement(
       adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
       fetchImpl: options.fetchImpl,
       timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
+      providerSelection: options.modelProvider ?? process.env.MODEL_PROVIDER,
       modelTraceProvider: options.modelTraceProvider
     });
 

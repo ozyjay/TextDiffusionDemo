@@ -52,7 +52,9 @@ export function formatStageText(text: string, showDebugLabel: boolean): string {
     return text;
   }
 
-  return text.replace(/\[(?:MASK|Mask|mask)\]|<mask>/g, '...');
+  return text
+    .replace(/\\n/g, '\n')
+    .replace(/\[(?:MASK|Mask|mask)\]|<mask>/g, '...');
 }
 
 function parseModelStageLabel(label: string): { kind: 'mask' | 'denoise'; current: number; total: number } | null {

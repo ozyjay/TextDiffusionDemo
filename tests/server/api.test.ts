@@ -23,6 +23,23 @@ describe('Express API', () => {
     expect(traces.body.traces.length).toBeGreaterThanOrEqual(4);
   });
 
+  it('reports model provider diagnostics without secrets', async () => {
+    const response = await request(createApp({
+      modelAdapterUrl: 'http://secret-host.example:8600/private',
+      modelTraceProvider: async () => null
+    }))
+      .get('/api/model-providers')
+      .expect(200);
+
+    expect(response.body.providerSelection).toBe('auto');
+    expect(response.body.providers.map((provider: { id: string }) => provider.id)).toEqual([
+      'external-adapter',
+      'mlx-diffusiongemma',
+      'fallback'
+    ]);
+    expect(JSON.stringify(response.body)).not.toContain('secret-host');
+  });
+
   it('returns ordered refinement stages for curated controls', async () => {
     const response = await request(app)
       .post('/api/refine')

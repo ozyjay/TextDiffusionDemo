@@ -40,4 +40,11 @@ describe('stage labels', () => {
     expect(formatStageText(text, false)).toBe('The robot ... orientation ... map.');
     expect(formatStageText(text, true)).toBe(text);
   });
+
+  it('renders escaped newlines as real line breaks for public display', () => {
+    const text = 'In fields ... forest deep,\\n...';
+
+    expect(formatStageText(text, false)).toBe('In fields ... forest deep,\n...');
+    expect(formatStageText(text, true)).toBe(text);
+  });
 });

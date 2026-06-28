@@ -16,7 +16,7 @@ import type {
 
 const outputTypes: Array<{ id: OutputType; label: string; hint: string }> = [
   { id: 'story', label: 'Short story', hint: 'A page-sized story that becomes clearer each pass.' },
-  { id: 'python', label: 'Python script', hint: 'A small readable script that forms from code-like noise.' }
+  { id: 'python', label: 'Python script', hint: 'A small readable script that fills in from missing pieces.' }
 ];
 
 const styles = ['clear', 'funny', 'sci-fi', 'campus', 'scientific', 'poetic'];
@@ -345,133 +345,169 @@ function createStreamingTrace(request: RefineRequest): Trace {
 
 <template>
   <main class="shell">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">Open Day AI Demo</p>
-        <h1>Beyond Next-Word Prediction: Text Diffusion Lab</h1>
-        <p class="subtitle">Watch page-sized text form from noise through staged refinement.</p>
-      </div>
-      <aside class="status-panel" aria-label="Demo status">
-        <span class="mode-label">Mode: {{ mode }}</span>
-        <span>{{ autoplayEnabled ? 'Autoplay on' : isRunning ? 'Refining' : 'Ready' }}</span>
-      </aside>
-    </header>
+    <div class="control-column">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Open Day AI Demo</p>
+          <h1>Beyond Next-Word Prediction: Text Diffusion Lab</h1>
+          <p class="subtitle">Watch missing text fill in and become clearer through staged refinement.</p>
+        </div>
+        <aside class="status-panel" aria-label="Demo status">
+          <span class="mode-label">Mode: {{ mode }}</span>
+          <span>{{ autoplayEnabled ? 'Autoplay on' : isRunning ? 'Refining' : 'Ready' }}</span>
+        </aside>
+      </header>
 
-    <section class="chooser" aria-label="Visitor choices">
-      <div class="lane-switch" role="group" aria-label="Output type">
-        <button
-          v-for="item in outputTypes"
-          :key="item.id"
-          :class="{ selected: outputType === item.id }"
-          type="button"
-          @click="outputType = item.id"
-        >
-          <strong>{{ item.label }}</strong>
-          <span>{{ item.hint }}</span>
-        </button>
-      </div>
-
-      <div class="prompt-panel">
-        <div class="prompt-source" role="group" aria-label="Prompt source">
+      <section class="chooser" aria-label="Visitor choices">
+        <div class="lane-switch" role="group" aria-label="Output type">
           <button
+            v-for="item in outputTypes"
+            :key="item.id"
+            :class="{ selected: outputType === item.id }"
             type="button"
-            :class="{ selected: promptSource === 'cards' }"
-            @click="setPromptSource('cards')"
+            @click="outputType = item.id"
           >
-            Prompt cards
+            <strong>{{ item.label }}</strong>
+            <span>{{ item.hint }}</span>
           </button>
-          <button
-            type="button"
-            :class="{ selected: promptSource === 'custom' }"
-            :disabled="!customPromptAvailable"
-            @click="setPromptSource('custom')"
-          >
+        </div>
+
+        <div class="prompt-panel">
+          <div class="prompt-source" role="group" aria-label="Prompt source">
+            <button
+              type="button"
+              :class="{ selected: promptSource === 'cards' }"
+              @click="setPromptSource('cards')"
+            >
+              Prompt cards
+            </button>
+            <button
+              type="button"
+              :class="{ selected: promptSource === 'custom' }"
+              :disabled="!customPromptAvailable"
+              @click="setPromptSource('custom')"
+            >
+              Custom prompt
+            </button>
+          </div>
+          <label class="custom-prompt-field">
             Custom prompt
-          </button>
+            <input
+              v-model="customPrompt"
+              maxlength="140"
+              minlength="8"
+              placeholder="A robot discovers a hidden campus garden."
+              type="text"
+              @focus="setPromptSource('custom')"
+            />
+            <span>{{ customPromptStatus }}</span>
+          </label>
+          <div class="prompt-strip">
+            <button
+              v-for="prompt in filteredPrompts"
+              :key="prompt.id"
+              class="prompt-card"
+              :class="{ selected: promptSource === 'cards' && selectedPromptId === prompt.id }"
+              type="button"
+              @click="selectPrompt(prompt.id)"
+            >
+              <strong>{{ prompt.prompt }}</strong>
+              <span>{{ prompt.notes }}</span>
+            </button>
+          </div>
         </div>
-        <label class="custom-prompt-field">
-          Custom prompt
-          <input
-            v-model="customPrompt"
-            maxlength="140"
-            minlength="8"
-            placeholder="A robot discovers a hidden campus garden."
-            type="text"
-            @focus="setPromptSource('custom')"
-          />
-          <span>{{ customPromptStatus }}</span>
+      </section>
+
+      <section class="control-board" aria-label="Demo controls">
+        <div class="selected-summary">
+          <span class="label">Selected</span>
+          <strong>{{ effectivePromptText }}</strong>
+        </div>
+
+        <label class="style-field">
+          Style
+          <select v-model="selectedStyle">
+            <option v-for="style in styles" :key="style" :value="style">
+              {{ style }}
+            </option>
+          </select>
         </label>
-        <div class="prompt-strip">
-          <button
-            v-for="prompt in filteredPrompts"
-            :key="prompt.id"
-            class="prompt-card"
-            :class="{ selected: promptSource === 'cards' && selectedPromptId === prompt.id }"
-            type="button"
-            @click="selectPrompt(prompt.id)"
-          >
-            <strong>{{ prompt.prompt }}</strong>
-            <span>{{ prompt.notes }}</span>
-          </button>
+
+        <label>
+          Creativity
+          <select v-model="creativity">
+            <option value="safer">Safer</option>
+            <option value="balanced">Balanced</option>
+            <option value="surprising">Surprising</option>
+          </select>
+        </label>
+        <label>
+          Length
+          <select v-model="length">
+            <option value="short">Short</option>
+            <option value="medium">Medium</option>
+            <option value="detailed">Detailed</option>
+          </select>
+        </label>
+        <label>
+          Constraint
+          <select v-model="constraint">
+            <option v-for="item in constraints" :key="item.id" :value="item.id">
+              {{ item.label }}
+            </option>
+          </select>
+        </label>
+        <label>
+          <span class="range-label">
+            Steps
+            <strong>{{ steps }}</strong>
+          </span>
+          <input v-model.number="steps" min="3" max="8" step="1" type="range" />
+        </label>
+        <label>
+          Speed
+          <input v-model.number="speed" min="1000" max="3200" step="100" type="range" />
+        </label>
+
+        <div class="button-row primary-actions">
+          <button class="primary" type="button" :disabled="!canRunDemo" @click="runDemo()">Diffuse Text</button>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <section class="control-board" aria-label="Demo controls">
-      <div class="selected-summary">
-        <span class="label">Selected</span>
-        <strong>{{ effectivePromptText }}</strong>
-      </div>
+      <section class="staff-controls" aria-label="Staff controls">
+        <span class="label">Staff controls</span>
+        <div class="button-row">
+          <button type="button" @click="runDemo('replay')">Replay</button>
+          <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
+            Autoplay loop
+          </button>
+          <button type="button" :class="{ selected: viewMode === 'steps' }" @click="viewMode = 'steps'">
+            Steps
+          </button>
+          <button type="button" :class="{ selected: viewMode === 'frames' }" @click="viewMode = 'frames'">
+            Every frame
+          </button>
+          <button type="button" @click="resetDemo">Reset</button>
+        </div>
+        <label class="checkbox-line">
+          <input v-model="modelAssisted" :disabled="usingCustomPrompt" type="checkbox" />
+          Model-assisted
+        </label>
+        <label class="checkbox-line">
+          <input v-model="reducedMotion" type="checkbox" />
+          Reduced motion
+        </label>
+        <label class="checkbox-line">
+          <input v-model="showDebugLabels" type="checkbox" />
+          Debug labels
+        </label>
+      </section>
 
-      <label class="style-field">
-        Style
-        <select v-model="selectedStyle">
-          <option v-for="style in styles" :key="style" :value="style">
-            {{ style }}
-          </option>
-        </select>
-      </label>
-
-      <label>
-        Creativity
-        <select v-model="creativity">
-          <option value="safer">Safer</option>
-          <option value="balanced">Balanced</option>
-          <option value="surprising">Surprising</option>
-        </select>
-      </label>
-      <label>
-        Length
-        <select v-model="length">
-          <option value="short">Short</option>
-          <option value="medium">Medium</option>
-          <option value="detailed">Detailed</option>
-        </select>
-      </label>
-      <label>
-        Constraint
-        <select v-model="constraint">
-          <option v-for="item in constraints" :key="item.id" :value="item.id">
-            {{ item.label }}
-          </option>
-        </select>
-      </label>
-      <label>
-        <span class="range-label">
-          Steps
-          <strong>{{ steps }}</strong>
-        </span>
-        <input v-model.number="steps" min="3" max="8" step="1" type="range" />
-      </label>
-      <label>
-        Speed
-        <input v-model.number="speed" min="1000" max="3200" step="100" type="range" />
-      </label>
-
-      <div class="button-row primary-actions">
-        <button class="primary" type="button" :disabled="!canRunDemo" @click="runDemo()">Diffuse Text</button>
-      </div>
-    </section>
+      <footer class="explanation">
+        <strong>What this shows:</strong>
+        {{ PUBLIC_EXPLANATION }}
+      </footer>
+    </div>
 
     <section
       class="stage-view"
@@ -539,39 +575,5 @@ function createStreamingTrace(request: RefineRequest): Trace {
         </template>
       </article>
     </section>
-
-    <section class="staff-controls" aria-label="Staff controls">
-      <span class="label">Staff controls</span>
-      <div class="button-row">
-        <button type="button" @click="runDemo('replay')">Replay</button>
-        <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
-          Autoplay loop
-        </button>
-        <button type="button" :class="{ selected: viewMode === 'steps' }" @click="viewMode = 'steps'">
-          Steps
-        </button>
-        <button type="button" :class="{ selected: viewMode === 'frames' }" @click="viewMode = 'frames'">
-          Every frame
-        </button>
-        <button type="button" @click="resetDemo">Reset</button>
-      </div>
-      <label class="checkbox-line">
-        <input v-model="modelAssisted" :disabled="usingCustomPrompt" type="checkbox" />
-        Model-assisted
-      </label>
-      <label class="checkbox-line">
-        <input v-model="reducedMotion" type="checkbox" />
-        Reduced motion
-      </label>
-      <label class="checkbox-line">
-        <input v-model="showDebugLabels" type="checkbox" />
-        Debug labels
-      </label>
-    </section>
-
-    <footer class="explanation">
-      <strong>What this shows:</strong>
-      {{ PUBLIC_EXPLANATION }}
-    </footer>
   </main>
 </template>

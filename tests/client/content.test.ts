@@ -9,6 +9,15 @@ describe('public copy', () => {
     expect(PUBLIC_EXPLANATION.toLowerCase()).toContain('diffusion-inspired');
   });
 
+  it('describes text diffusion as masked or missing text rather than random noise', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+
+    expect(PUBLIC_EXPLANATION.toLowerCase()).toContain('missing');
+    expect(PUBLIC_EXPLANATION.toLowerCase()).not.toContain('noisy');
+    expect(appSource).not.toContain('form from noise');
+    expect(appSource).not.toContain('code-like noise');
+  });
+
   it('does not claim the AI is thinking', () => {
     expect(PUBLIC_EXPLANATION.toLowerCase()).not.toContain('ai is thinking');
     expect(PUBLIC_EXPLANATION.toLowerCase()).not.toContain('shows the ai thinking');
@@ -77,5 +86,23 @@ describe('public copy', () => {
     expect(appSource).toContain('Custom prompt');
     expect(appSource).toContain('prompt-panel');
     expect(appSource).toContain('customPrompt');
+  });
+
+  it('keeps the response stage in a full-height desktop side panel', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'client/src/styles/main.css'), 'utf8');
+
+    expect(styles).toContain('"controls stage"');
+    expect(styles).toContain('grid-area: controls');
+    expect(styles).toContain('grid-area: stage');
+  });
+
+  it('lets the left control column scroll without page-level scrolling', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+    const styles = readFileSync(resolve(process.cwd(), 'client/src/styles/main.css'), 'utf8');
+
+    expect(appSource).toContain('class="control-column"');
+    expect(styles).toContain('.control-column');
+    expect(styles).toContain('overflow-y: auto');
+    expect(styles).toContain('overscroll-behavior: contain');
   });
 });
