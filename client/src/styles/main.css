@@ -250,6 +250,22 @@ select,
   padding: 0 0.65rem;
 }
 
+select {
+  color: #f7fbff;
+  background-color: #10242a;
+}
+
+select option,
+select optgroup {
+  color: #f7fbff;
+  background-color: #10242a;
+}
+
+select option:checked {
+  color: #071014;
+  background-color: #f8d66d;
+}
+
 .style-field select {
   text-transform: capitalize;
 }
