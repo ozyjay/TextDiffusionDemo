@@ -23,12 +23,15 @@
     "@types/supertest": "^6.0.2",
     "@vue/test-utils": "^2.4.6",
     "concurrently": "^9.1.2",
-    "jsdom": "^25.0.1",
+    "jsdom": "^29.1.1",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^8.0.16",
     "vitest": "^4.1.9",
     "vue-tsc": "^3.3.5"
+  },
+  "overrides": {
+    "glob": "^13.0.6"
   }
 }
