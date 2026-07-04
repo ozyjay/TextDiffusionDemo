@@ -145,9 +145,9 @@ describe('model adapter', () => {
     expect(externalCalls).toBe(0);
   });
 
-  it('uses auto priority and falls through invalid external output to MLX', async () => {
+  it('uses auto priority and falls through invalid external output to the local HF provider on Linux', async () => {
     const seedTrace = refineTrace(request);
-    const modelTrace = { ...seedTrace, id: 'robot-orientation-story-mlx' };
+    const modelTrace = { ...seedTrace, id: 'robot-orientation-story-hf' };
     let workerCalls = 0;
 
     const result = await requestModelTrace(request, seedTrace, {
@@ -163,7 +163,7 @@ describe('model adapter', () => {
       timeoutMs: 50
     });
 
-    expect(result?.id).toBe('robot-orientation-story-mlx');
+    expect(result?.id).toBe('robot-orientation-story-hf');
     expect(workerCalls).toBe(1);
   });
 
@@ -179,6 +179,7 @@ describe('model adapter', () => {
     expect(diagnostics.providerSelection).toBe('auto');
     expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
       'external-adapter',
+      'hf-diffusiongemma',
       'mlx-diffusiongemma',
       'fallback'
     ]);

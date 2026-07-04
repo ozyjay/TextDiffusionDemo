@@ -14,6 +14,7 @@ interface PendingRequest {
 export interface DiffusionGemmaWorkerClientOptions {
   pythonPath?: string;
   modelId?: string;
+  engine?: string;
   spawnImpl?: SpawnLike;
 }
 
@@ -23,11 +24,13 @@ export class DiffusionGemmaWorkerClient {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly pythonPath: string;
   private readonly modelId: string;
+  private readonly engine: string;
   private readonly spawnImpl: SpawnLike;
 
   constructor(options: DiffusionGemmaWorkerClientOptions = {}) {
     this.pythonPath = options.pythonPath ?? process.env.DIFFUSIONGEMMA_PYTHON ?? defaultDiffusionGemmaPythonPath();
     this.modelId = options.modelId ?? process.env.DIFFUSIONGEMMA_MODEL ?? 'google/diffusiongemma-26B-A4B-it';
+    this.engine = options.engine ?? process.env.DIFFUSIONGEMMA_ENGINE ?? defaultDiffusionGemmaEngine();
     this.spawnImpl = options.spawnImpl ?? spawn;
   }
 
@@ -64,6 +67,7 @@ export class DiffusionGemmaWorkerClient {
 
     const env = {
       ...process.env,
+      DIFFUSIONGEMMA_ENGINE: this.engine,
       DIFFUSIONGEMMA_MODEL: this.modelId,
       PYTHONPATH: [
         path.join(process.cwd(), 'adapters/diffusiongemma_adapter'),
@@ -147,6 +151,8 @@ export class DiffusionGemmaWorkerClient {
 }
 
 const defaultClient = new DiffusionGemmaWorkerClient();
+const hfClient = new DiffusionGemmaWorkerClient({ engine: 'transformers' });
+const mlxClient = new DiffusionGemmaWorkerClient({ engine: 'mlx' });
 
 export async function requestDiffusionGemmaTrace(
   request: RefineRequest,
@@ -154,6 +160,22 @@ export async function requestDiffusionGemmaTrace(
   timeoutMs: number
 ): Promise<Trace | null> {
   return defaultClient.requestTrace(request, seedTrace, timeoutMs);
+}
+
+export async function requestHfDiffusionGemmaTrace(
+  request: RefineRequest,
+  seedTrace: Trace,
+  timeoutMs: number
+): Promise<Trace | null> {
+  return hfClient.requestTrace(request, seedTrace, timeoutMs);
+}
+
+export async function requestMlxDiffusionGemmaTrace(
+  request: RefineRequest,
+  seedTrace: Trace,
+  timeoutMs: number
+): Promise<Trace | null> {
+  return mlxClient.requestTrace(request, seedTrace, timeoutMs);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -164,4 +186,8 @@ export function defaultDiffusionGemmaPythonPath(platform = process.platform): st
   return platform === 'win32'
     ? '.venv-diffusiongemma\\Scripts\\python.exe'
     : '.venv-diffusiongemma/bin/python';
+}
+
+export function defaultDiffusionGemmaEngine(platform = process.platform): string {
+  return platform === 'darwin' ? 'mlx' : 'transformers';
 }

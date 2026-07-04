@@ -5,7 +5,8 @@ import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
-from .engine import DiffusionGemmaEngine, DiffusionGemmaUnavailable
+from .engine import DiffusionGemmaUnavailable
+from .engine_factory import create_engine
 from .prompting import DEFAULT_MODEL
 from .trace_mapping import build_trace_from_final, build_trace_from_snapshots
 
@@ -14,7 +15,7 @@ SERVICE_NAME = "diffusiongemma-adapter"
 
 
 class DiffusionGemmaAdapterHandler(BaseHTTPRequestHandler):
-    engine = DiffusionGemmaEngine()
+    engine = create_engine()
 
     def do_GET(self) -> None:
         if self.path == "/api/health":
@@ -89,7 +90,7 @@ def run() -> None:
     host = os.environ.get("MODEL_ADAPTER_HOST", "127.0.0.1")
     port = int(os.environ.get("MODEL_ADAPTER_PORT", "8600"))
     model_id = os.environ.get("DIFFUSIONGEMMA_MODEL", DEFAULT_MODEL)
-    DiffusionGemmaAdapterHandler.engine = DiffusionGemmaEngine(model_id)
+    DiffusionGemmaAdapterHandler.engine = create_engine(model_id)
     server = ThreadingHTTPServer((host, port), DiffusionGemmaAdapterHandler)
     print(f"DiffusionGemma adapter listening at http://{host}:{port}", flush=True)
     server.serve_forever()

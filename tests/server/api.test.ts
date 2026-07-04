@@ -34,6 +34,7 @@ describe('Express API', () => {
     expect(response.body.providerSelection).toBe('auto');
     expect(response.body.providers.map((provider: { id: string }) => provider.id)).toEqual([
       'external-adapter',
+      'hf-diffusiongemma',
       'mlx-diffusiongemma',
       'fallback'
     ]);

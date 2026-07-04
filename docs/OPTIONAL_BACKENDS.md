@@ -164,6 +164,17 @@ DIFFUSIONGEMMA_BACKEND_URL=http://127.0.0.1:8888
 DIFFUSIONGEMMA_TIMEOUT_MS=10000
 ```
 
+Current local provider choices:
+
+```env
+MODEL_PROVIDER=auto
+DIFFUSIONGEMMA_ENGINE=auto
+```
+
+- `hf-diffusiongemma` uses Hugging Face Transformers and is the preferred Fedora/Linux experiment path.
+- `mlx-diffusiongemma` uses MLX and is the preferred macOS / Apple Silicon experiment path.
+- `auto` keeps the external adapter first, then prefers the platform-appropriate local worker, then falls back.
+
 Do not expose staff-only backend controls to visitor phones or public routes.
 
 ---

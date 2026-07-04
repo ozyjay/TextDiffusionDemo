@@ -4,12 +4,12 @@ import json
 import sys
 from typing import Any
 
-from .engine import DiffusionGemmaEngine
-from .trace_mapping import build_trace_from_snapshots
+from .engine_factory import create_engine
+from .trace_mapping import build_trace_from_final, build_trace_from_snapshots
 
 
 def main() -> int:
-    engine = DiffusionGemmaEngine()
+    engine = create_engine()
     for line in sys.stdin:
         if not line.strip():
             continue
@@ -37,12 +37,15 @@ def handle_line(line: str, engine: DiffusionGemmaEngine) -> dict[str, Any]:
             }
 
         result = engine.refine(request, seed_trace)
-        trace = build_trace_from_snapshots(
-            seed_trace,
-            result.get("snapshots", []),
-            result.get("finalText", ""),
-            preserve_duplicate_frames=bool(request.get("includeEveryFrame", False)),
-        )
+        if result.get("snapshots"):
+            trace = build_trace_from_snapshots(
+                seed_trace,
+                result.get("snapshots", []),
+                result.get("finalText", ""),
+                preserve_duplicate_frames=bool(request.get("includeEveryFrame", False)),
+            )
+        else:
+            trace = build_trace_from_final(seed_trace, result.get("finalText", ""))
         return {"id": request_id, "ok": True, "trace": trace}
     except Exception as error:
         return {

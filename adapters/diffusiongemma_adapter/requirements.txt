@@ -1,1 +1,3 @@
+# macOS / Apple Silicon MLX runtime.
+# On Fedora/Linux, install requirements-fedora.txt instead.
 mlx-vlm==0.6.3

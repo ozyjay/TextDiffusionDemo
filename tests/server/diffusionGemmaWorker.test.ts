@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import {
+  defaultDiffusionGemmaEngine,
   defaultDiffusionGemmaPythonPath,
   DiffusionGemmaWorkerClient
 } from '../../server/services/diffusionGemmaWorker';
@@ -39,6 +40,12 @@ describe('DiffusionGemma worker client', () => {
     expect(defaultDiffusionGemmaPythonPath('darwin')).toBe('.venv-diffusiongemma/bin/python');
     expect(defaultDiffusionGemmaPythonPath('linux')).toBe('.venv-diffusiongemma/bin/python');
     expect(defaultDiffusionGemmaPythonPath('win32')).toBe('.venv-diffusiongemma\\Scripts\\python.exe');
+  });
+
+  it('uses Transformers by default off macOS and MLX on macOS', () => {
+    expect(defaultDiffusionGemmaEngine('linux')).toBe('transformers');
+    expect(defaultDiffusionGemmaEngine('win32')).toBe('transformers');
+    expect(defaultDiffusionGemmaEngine('darwin')).toBe('mlx');
   });
 
   it('sends JSON requests to the Python worker and returns validated traces', async () => {

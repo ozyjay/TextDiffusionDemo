@@ -70,7 +70,12 @@ export async function getProviderDiagnostics(
 }
 
 export function normaliseProviderSelection(selection: string | undefined): ProviderSelection {
-  if (selection === 'external-adapter' || selection === 'mlx-diffusiongemma' || selection === 'fallback') {
+  if (
+    selection === 'external-adapter' ||
+    selection === 'hf-diffusiongemma' ||
+    selection === 'mlx-diffusiongemma' ||
+    selection === 'fallback'
+  ) {
     return selection;
   }
   return 'auto';

@@ -52,18 +52,28 @@ npm run build
 
 Model-assisted mode is optional and staff-only. The frontend still calls `POST /api/refine`; when **Model-assisted** is enabled, the Express backend lazily starts a project-local Python worker and talks to it over newline-delimited JSON.
 
-Set up the local Python runtime on macOS or Linux:
+Set up the local Python runtime on Fedora/Linux:
 
 ```bash
 python3 -m venv .venv-diffusiongemma
-.venv-diffusiongemma/bin/python -m pip install -U pip -r adapters/diffusiongemma_adapter/requirements.txt
+.venv-diffusiongemma/bin/python -m pip install -U pip
+.venv-diffusiongemma/bin/python -m pip install -r adapters/diffusiongemma_adapter/requirements-fedora.txt
+```
+
+Set up the local Python runtime on macOS / Apple Silicon:
+
+```bash
+python3 -m venv .venv-diffusiongemma
+.venv-diffusiongemma/bin/python -m pip install -U pip
+.venv-diffusiongemma/bin/python -m pip install -r adapters/diffusiongemma_adapter/requirements-mlx.txt
 ```
 
 Windows PowerShell:
 
 ```powershell
 py -3 -m venv .venv-diffusiongemma
-.\.venv-diffusiongemma\Scripts\python.exe -m pip install -U pip -r adapters\diffusiongemma_adapter\requirements.txt
+.\.venv-diffusiongemma\Scripts\python.exe -m pip install -U pip
+.\.venv-diffusiongemma\Scripts\python.exe -m pip install -r adapters\diffusiongemma_adapter\requirements-fedora.txt
 ```
 
 Then start the normal demo:
@@ -90,6 +100,7 @@ Later requests reuse the warm worker. If the worker is unavailable, slow, invali
 Useful environment overrides:
 
 ```bash
+DIFFUSIONGEMMA_ENGINE=auto
 DIFFUSIONGEMMA_MODEL=google/diffusiongemma-26B-A4B-it
 MODEL_PROVIDER=auto
 MODEL_ADAPTER_TIMEOUT_MS=30000
@@ -105,7 +116,9 @@ DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
 $env:DIFFUSIONGEMMA_PYTHON = ".\.venv-diffusiongemma\Scripts\python.exe"
 ```
 
-`MODEL_PROVIDER` can be `auto`, `external-adapter`, or `mlx-diffusiongemma`. In `auto` mode, the backend tries a configured external adapter first, then the managed MLX DiffusionGemma worker, then falls back safely. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `POST <MODEL_ADAPTER_URL>/api/refine`.
+`MODEL_PROVIDER` can be `auto`, `external-adapter`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend tries a configured external adapter first, then a local DiffusionGemma worker, then falls back safely. On Fedora/Linux, `auto` prefers the Hugging Face Transformers worker. On macOS, `auto` prefers the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
+
+`DIFFUSIONGEMMA_ENGINE` can be `auto`, `transformers`, or `mlx`. Leave it as `auto` unless you are explicitly testing one runtime.
 
 Provider diagnostics are available for staff/debug tooling:
 
@@ -113,7 +126,20 @@ Provider diagnostics are available for staff/debug tooling:
 curl http://127.0.0.1:8300/api/model-providers
 ```
 
-Direct one-off model smoke test:
+Fedora/Linux smoke test:
+
+```bash
+PYTHONPATH=adapters/diffusiongemma_adapter DIFFUSIONGEMMA_ENGINE=transformers \
+  .venv-diffusiongemma/bin/python -c "from diffusiongemma_adapter.engine_factory import create_engine; print(type(create_engine()).__name__)"
+```
+
+For normal testing, start the app and use the provider diagnostics endpoint:
+
+```bash
+curl http://127.0.0.1:8300/api/model-providers
+```
+
+macOS / MLX one-off model smoke test:
 
 ```bash
 .venv-diffusiongemma/bin/python -m mlx_vlm.generate \
@@ -125,21 +151,6 @@ Direct one-off model smoke test:
   --block-length 32 \
   --temperature 0.0 \
   --seed 11 \
-  --no-verbose
-```
-
-Windows PowerShell uses the same arguments with the Windows venv Python path:
-
-```powershell
-.\.venv-diffusiongemma\Scripts\python.exe -m mlx_vlm.generate `
-  --model google/diffusiongemma-26B-A4B-it `
-  --system "You write safe, concise text for a public university Open Day AI demo. Return only the answer." `
-  --prompt "Prompt: A robot joins university orientation. Style: funny. Constraint: include university. Write one sentence under 18 words." `
-  --max-tokens 64 `
-  --max-denoising-steps 24 `
-  --block-length 32 `
-  --temperature 0.0 `
-  --seed 11 `
   --no-verbose
 ```
 

@@ -1,7 +1,11 @@
 import type { RefineRequest, Trace } from '../../shared/types';
 import { ExternalAdapterProvider } from './modelProviders/externalAdapterProvider';
 import { FallbackProvider } from './modelProviders/fallbackProvider';
-import { MlxDiffusionGemmaProvider, type WorkerTraceProvider } from './modelProviders/mlxDiffusionGemmaProvider';
+import {
+  HfDiffusionGemmaProvider,
+  MlxDiffusionGemmaProvider,
+  type WorkerTraceProvider
+} from './modelProviders/mlxDiffusionGemmaProvider';
 import {
   getProviderDiagnostics,
   resolveModelTrace
@@ -39,9 +43,19 @@ export async function getModelProviderDiagnostics(
 }
 
 function createDefaultProviders(options: ModelAdapterOptions): ModelTraceProviderStrategy[] {
+  const localProviders: ModelTraceProviderStrategy[] = process.platform === 'darwin'
+    ? [
+        new MlxDiffusionGemmaProvider(options.modelTraceProvider),
+        new HfDiffusionGemmaProvider(options.modelTraceProvider)
+      ]
+    : [
+        new HfDiffusionGemmaProvider(options.modelTraceProvider),
+        new MlxDiffusionGemmaProvider(options.modelTraceProvider)
+      ];
+
   return [
     new ExternalAdapterProvider(options.adapterUrl ?? process.env.MODEL_ADAPTER_URL, options.fetchImpl),
-    new MlxDiffusionGemmaProvider(options.modelTraceProvider),
+    ...localProviders,
     new FallbackProvider()
   ];
 }
