@@ -14,7 +14,7 @@ Visitors choose a prompt card, press **Diffuse Text**, and watch a whole piece o
 4. a styled draft;
 5. a final answer.
 
-In staff-only **Model-assisted** mode, the backend can run `mlx-community/diffusiongemma-26B-A4B-it-4bit` locally and show real `Mask` / `Denoise` draft frames before the final model output.
+In staff-only **Model-assisted** mode, the backend can run `google/diffusiongemma-26B-A4B-it` locally and show real `Mask` / `Denoise` draft frames before the final model output when the local runtime supports it.
 
 ## Quick Start
 
@@ -28,6 +28,12 @@ Run the demo:
 
 ```bash
 ./scripts/dev.sh
+```
+
+Windows PowerShell:
+
+```powershell
+.\scripts\pwsh\dev.ps1
 ```
 
 Open:
@@ -46,11 +52,18 @@ npm run build
 
 Model-assisted mode is optional and staff-only. The frontend still calls `POST /api/refine`; when **Model-assisted** is enabled, the Express backend lazily starts a project-local Python worker and talks to it over newline-delimited JSON.
 
-Set up the local Python runtime on Apple Silicon:
+Set up the local Python runtime on macOS or Linux:
 
 ```bash
 python3 -m venv .venv-diffusiongemma
 .venv-diffusiongemma/bin/python -m pip install -U pip -r adapters/diffusiongemma_adapter/requirements.txt
+```
+
+Windows PowerShell:
+
+```powershell
+py -3 -m venv .venv-diffusiongemma
+.\.venv-diffusiongemma\Scripts\python.exe -m pip install -U pip -r adapters\diffusiongemma_adapter\requirements.txt
 ```
 
 Then start the normal demo:
@@ -59,10 +72,17 @@ Then start the normal demo:
 ./scripts/dev.sh
 ```
 
+Windows PowerShell:
+
+```powershell
+.\scripts\pwsh\dev.ps1
+```
+
 In the UI, use **Staff controls** to enable **Model-assisted**. The first request can take a little while while the backend starts:
 
 ```text
-.venv-diffusiongemma/bin/python -m diffusiongemma_adapter.worker
+macOS/Linux: .venv-diffusiongemma/bin/python -m diffusiongemma_adapter.worker
+Windows:     .venv-diffusiongemma\Scripts\python.exe -m diffusiongemma_adapter.worker
 ```
 
 Later requests reuse the warm worker. If the worker is unavailable, slow, invalid, or used on an unsupported lane, the app returns the safe fallback as `model-fallback`.
@@ -70,10 +90,19 @@ Later requests reuse the warm worker. If the worker is unavailable, slow, invali
 Useful environment overrides:
 
 ```bash
-DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
-DIFFUSIONGEMMA_MODEL=mlx-community/diffusiongemma-26B-A4B-it-4bit
+DIFFUSIONGEMMA_MODEL=google/diffusiongemma-26B-A4B-it
 MODEL_PROVIDER=auto
 MODEL_ADAPTER_TIMEOUT_MS=30000
+```
+
+Leave `DIFFUSIONGEMMA_PYTHON` unset to use the project virtualenv default for the current OS. Override it only when the Python executable lives somewhere else:
+
+```bash
+DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
+```
+
+```powershell
+$env:DIFFUSIONGEMMA_PYTHON = ".\.venv-diffusiongemma\Scripts\python.exe"
 ```
 
 `MODEL_PROVIDER` can be `auto`, `external-adapter`, or `mlx-diffusiongemma`. In `auto` mode, the backend tries a configured external adapter first, then the managed MLX DiffusionGemma worker, then falls back safely. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `POST <MODEL_ADAPTER_URL>/api/refine`.
@@ -88,7 +117,7 @@ Direct one-off model smoke test:
 
 ```bash
 .venv-diffusiongemma/bin/python -m mlx_vlm.generate \
-  --model mlx-community/diffusiongemma-26B-A4B-it-4bit \
+  --model google/diffusiongemma-26B-A4B-it \
   --system "You write safe, concise text for a public university Open Day AI demo. Return only the answer." \
   --prompt "Prompt: A robot joins university orientation. Style: funny. Constraint: include university. Write one sentence under 18 words." \
   --max-tokens 64 \
@@ -96,6 +125,21 @@ Direct one-off model smoke test:
   --block-length 32 \
   --temperature 0.0 \
   --seed 11 \
+  --no-verbose
+```
+
+Windows PowerShell uses the same arguments with the Windows venv Python path:
+
+```powershell
+.\.venv-diffusiongemma\Scripts\python.exe -m mlx_vlm.generate `
+  --model google/diffusiongemma-26B-A4B-it `
+  --system "You write safe, concise text for a public university Open Day AI demo. Return only the answer." `
+  --prompt "Prompt: A robot joins university orientation. Style: funny. Constraint: include university. Write one sentence under 18 words." `
+  --max-tokens 64 `
+  --max-denoising-steps 24 `
+  --block-length 32 `
+  --temperature 0.0 `
+  --seed 11 `
   --no-verbose
 ```
 
@@ -111,6 +155,8 @@ The main screen exposes curated prompt cards, a staff-supervised custom prompt, 
 Custom prompts are story-only in v1. They are not stored, and they still fall back to the selected curated card scaffold if the live model cannot respond.
 
 ## Scripts
+
+macOS/Linux:
 
 ```bash
 ./scripts/dev.sh                 # Stop stale reserved-port processes, then start frontend and backend
@@ -161,6 +207,8 @@ PYTHONPATH=adapters/diffusiongemma_adapter python3 -m unittest discover -s tests
 PowerShell:
 
 ```powershell
+$env:PYTHONPATH = "adapters/diffusiongemma_adapter"
+py -3 -m unittest discover -s tests/diffusiongemma_adapter -v
 .\scripts\pwsh\verify.ps1
 ```
 

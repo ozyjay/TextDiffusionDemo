@@ -22,11 +22,38 @@ export class ExternalAdapterProvider extends BaseModelProvider implements ModelT
 
   async isAvailable(): Promise<ProviderAvailability> {
     const configured = Boolean(this.adapterUrl?.trim());
-    return this.updateAvailability({
-      configured,
-      available: configured,
-      reason: configured ? 'Configured.' : 'MODEL_ADAPTER_URL is not set.'
-    });
+    if (!configured) {
+      return this.updateAvailability({
+        configured,
+        available: false,
+        reason: 'MODEL_ADAPTER_URL is not set.'
+      });
+    }
+
+    const adapterUrl = this.adapterUrl?.trim() ?? '';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1000);
+
+    try {
+      const response = await this.fetchImpl(`${adapterUrl.replace(/\/$/, '')}/api/health`, {
+        method: 'GET',
+        signal: controller.signal
+      });
+
+      return this.updateAvailability({
+        configured: true,
+        available: response.ok,
+        reason: response.ok ? 'Adapter health check passed.' : `Adapter health returned HTTP ${response.status}.`
+      });
+    } catch (error) {
+      return this.updateAvailability({
+        configured: true,
+        available: false,
+        reason: error instanceof Error ? error.message : 'Adapter health check failed.'
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async refine(request: RefineRequest, seedTrace: Trace, timeoutMs: number): Promise<Trace | null> {

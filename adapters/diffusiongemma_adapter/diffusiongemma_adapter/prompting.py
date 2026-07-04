@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-DEFAULT_MODEL = "mlx-community/diffusiongemma-26B-A4B-it-4bit"
+DEFAULT_MODEL = "google/diffusiongemma-26B-A4B-it"
 
 
 @dataclass(frozen=True)

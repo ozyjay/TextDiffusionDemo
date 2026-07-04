@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -k -n server,client -c cyan,green \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch server/index.ts",
-    "dev:client": "vite --host 127.0.0.1 --port 3300 --strictPort",
+    "dev:client": "vite --strictPort",
     "build": "vue-tsc --noEmit && vite build",
     "start": "tsx server/index.ts",
     "test": "vitest run --config vitest.config.ts",

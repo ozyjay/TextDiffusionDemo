@@ -26,8 +26,8 @@ export class DiffusionGemmaWorkerClient {
   private readonly spawnImpl: SpawnLike;
 
   constructor(options: DiffusionGemmaWorkerClientOptions = {}) {
-    this.pythonPath = options.pythonPath ?? process.env.DIFFUSIONGEMMA_PYTHON ?? '.venv-diffusiongemma/bin/python';
-    this.modelId = options.modelId ?? process.env.DIFFUSIONGEMMA_MODEL ?? 'mlx-community/diffusiongemma-26B-A4B-it-4bit';
+    this.pythonPath = options.pythonPath ?? process.env.DIFFUSIONGEMMA_PYTHON ?? defaultDiffusionGemmaPythonPath();
+    this.modelId = options.modelId ?? process.env.DIFFUSIONGEMMA_MODEL ?? 'google/diffusiongemma-26B-A4B-it';
     this.spawnImpl = options.spawnImpl ?? spawn;
   }
 
@@ -158,4 +158,10 @@ export async function requestDiffusionGemmaTrace(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+export function defaultDiffusionGemmaPythonPath(platform = process.platform): string {
+  return platform === 'win32'
+    ? '.venv-diffusiongemma\\Scripts\\python.exe'
+    : '.venv-diffusiongemma/bin/python';
 }

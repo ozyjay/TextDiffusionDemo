@@ -9,7 +9,7 @@ collect_pids() {
     lsof -tiTCP:"$FRONTEND_PORT" -sTCP:LISTEN 2>/dev/null || true
     lsof -tiTCP:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null || true
     pgrep -f "tsx watch server/index.ts" 2>/dev/null || true
-    pgrep -f "vite --host ${FRONTEND_HOST:-127.0.0.1} --port $FRONTEND_PORT" 2>/dev/null || true
+    pgrep -f "vite --strictPort" 2>/dev/null || true
     pgrep -f "concurrently -k -n server,client" 2>/dev/null || true
   } | sort -u
 }

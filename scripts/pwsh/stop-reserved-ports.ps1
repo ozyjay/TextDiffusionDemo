@@ -62,7 +62,7 @@ function Stop-MatchingProcess {
 Stop-ReservedPort -Port $FrontendPort
 Stop-ReservedPort -Port $BackendPort
 Stop-MatchingProcess -Pattern "tsx watch server/index.ts"
-Stop-MatchingProcess -Pattern "vite --host 127.0.0.1 --port $FrontendPort"
+Stop-MatchingProcess -Pattern "vite --strictPort"
 Stop-MatchingProcess -Pattern "concurrently -k -n server,client"
 
 Start-Sleep -Milliseconds 500

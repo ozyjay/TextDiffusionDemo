@@ -20,6 +20,7 @@ describe('launch scripts', () => {
     expect(helper).toContain('lsof -tiTCP:"$FRONTEND_PORT" -sTCP:LISTEN');
     expect(helper).toContain('lsof -tiTCP:"$BACKEND_PORT" -sTCP:LISTEN');
     expect(helper).toContain('pgrep -f "tsx watch server/index.ts"');
+    expect(helper).toContain('pgrep -f "vite --strictPort"');
     expect(helper).toContain('wait_for_ports');
   });
 
@@ -30,6 +31,7 @@ describe('launch scripts', () => {
     expect(readProjectFile('scripts/pwsh/dev.ps1')).toContain('stop-reserved-ports.ps1');
     expect(readProjectFile('scripts/pwsh/open-day.ps1')).toContain('stop-reserved-ports.ps1');
     expect(cleanup).toContain('Stop-MatchingProcess -Pattern "tsx watch server/index.ts"');
+    expect(cleanup).toContain('Stop-MatchingProcess -Pattern "vite --strictPort"');
     expect(cleanup).toContain('Get-Command Get-NetTCPConnection');
     expect(cleanup).toContain('lsof -tiTCP:$Port -sTCP:LISTEN');
     expect(smoke).toContain('Get-Command Get-NetTCPConnection');

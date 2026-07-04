@@ -119,7 +119,9 @@ These are implementation assumptions to verify with smoke tests, not promises.
 | Platform | Expected usefulness | Notes |
 |---|---|---|
 | CUDA / NVIDIA | Best target for real DiffusionGemma testing | Prefer this for first serious live-backend benchmark. |
-| macOS / Apple Silicon | Useful for local experimentation if supported by the current Unsloth path | Benchmark before relying on it for public use. |
+| macOS / Apple Silicon | Useful for local experimentation if the installed runtime supports it | Benchmark before relying on it for public use. |
+| Linux / CUDA | Best target for first serious live-backend benchmark | Prefer this if event hardware has an NVIDIA GPU. |
+| Windows | Supported for the Node/Vue demo and PowerShell launch scripts; live-model support depends on the Python/model runtime | Keep scripted/template fallback available. |
 | ROCm / AMD | Plausible later experiment, but not first target | Do not assume compatibility without a working smoke test. |
 | CPU only | Useful for scripted/template modes; real diffusion backend may be too slow | Must remain a valid fallback environment. |
 

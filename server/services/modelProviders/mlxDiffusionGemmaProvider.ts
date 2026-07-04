@@ -1,5 +1,6 @@
+import { existsSync } from 'node:fs';
 import type { RefineRequest, Trace } from '../../../shared/types';
-import { requestDiffusionGemmaTrace } from '../diffusionGemmaWorker';
+import { defaultDiffusionGemmaPythonPath, requestDiffusionGemmaTrace } from '../diffusionGemmaWorker';
 import { BaseModelProvider } from './base';
 import type { ModelTraceProviderStrategy, ProviderAvailability } from './types';
 
@@ -23,10 +24,27 @@ export class MlxDiffusionGemmaProvider extends BaseModelProvider implements Mode
   }
 
   async isAvailable(): Promise<ProviderAvailability> {
+    if (this.workerProvider !== requestDiffusionGemmaTrace) {
+      return this.updateAvailability({
+        configured: true,
+        available: true,
+        reason: 'Custom worker provider configured.'
+      });
+    }
+
+    const pythonPath = process.env.DIFFUSIONGEMMA_PYTHON ?? defaultDiffusionGemmaPythonPath();
+    if (!existsSync(pythonPath)) {
+      return this.updateAvailability({
+        configured: true,
+        available: false,
+        reason: `Python worker executable was not found at ${pythonPath}.`
+      });
+    }
+
     return this.updateAvailability({
       configured: true,
       available: true,
-      reason: 'MLX worker will be started lazily.'
+      reason: 'Python worker executable is present; model will be loaded lazily.'
     });
   }
 

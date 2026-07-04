@@ -1,3 +1,4 @@
+import './registerEnv';
 import { createApp } from './app';
 
 const host = process.env.BACKEND_HOST ?? '127.0.0.1';

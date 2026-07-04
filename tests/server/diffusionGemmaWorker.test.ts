@@ -1,6 +1,9 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
-import { DiffusionGemmaWorkerClient } from '../../server/services/diffusionGemmaWorker';
+import {
+  defaultDiffusionGemmaPythonPath,
+  DiffusionGemmaWorkerClient
+} from '../../server/services/diffusionGemmaWorker';
 import { refineTrace } from '../../server/services/traceService';
 import type { RefineRequest } from '../../shared/types';
 
@@ -32,6 +35,12 @@ const storyRequest: RefineRequest = {
 };
 
 describe('DiffusionGemma worker client', () => {
+  it('uses OS-specific project virtualenv Python defaults', () => {
+    expect(defaultDiffusionGemmaPythonPath('darwin')).toBe('.venv-diffusiongemma/bin/python');
+    expect(defaultDiffusionGemmaPythonPath('linux')).toBe('.venv-diffusiongemma/bin/python');
+    expect(defaultDiffusionGemmaPythonPath('win32')).toBe('.venv-diffusiongemma\\Scripts\\python.exe');
+  });
+
   it('sends JSON requests to the Python worker and returns validated traces', async () => {
     const fakeProcess = new FakeWorkerProcess();
     const client = new DiffusionGemmaWorkerClient({

@@ -29,7 +29,10 @@ describe('model adapter', () => {
 
     const result = await requestModelTrace(request, seedTrace, {
       adapterUrl: 'http://127.0.0.1:8600',
-      fetchImpl: async (_url, init) => {
+      fetchImpl: async (url, init) => {
+        if (String(url).endsWith('/api/health')) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
         expect(JSON.parse(String(init?.body)).seedTrace.id).toBe(seedTrace.id);
         return new Response(JSON.stringify({ trace: modelTrace }), { status: 200 });
       },
@@ -67,7 +70,9 @@ describe('model adapter', () => {
 
     const result = await requestModelTrace(request, seedTrace, {
       adapterUrl: 'http://127.0.0.1:8600',
-      fetchImpl: async () => new Response(JSON.stringify({ error: 'story output only' }), { status: 503 }),
+      fetchImpl: async (url) => String(url).endsWith('/api/health')
+        ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+        : new Response(JSON.stringify({ error: 'story output only' }), { status: 503 }),
       timeoutMs: 50
     });
 
@@ -83,7 +88,9 @@ describe('model adapter', () => {
 
     const result = await requestModelTrace(request, seedTrace, {
       adapterUrl: 'http://127.0.0.1:8600',
-      fetchImpl: async () => new Response(JSON.stringify({ trace: mismatchedTrace }), { status: 200 }),
+      fetchImpl: async (url) => String(url).endsWith('/api/health')
+        ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+        : new Response(JSON.stringify({ trace: mismatchedTrace }), { status: 200 }),
       timeoutMs: 50
     });
 
@@ -99,7 +106,10 @@ describe('model adapter', () => {
     const result = await requestModelTrace(request, seedTrace, {
       adapterUrl: 'http://127.0.0.1:8600',
       providerSelection: 'external-adapter',
-      fetchImpl: async () => {
+      fetchImpl: async (url) => {
+        if (String(url).endsWith('/api/health')) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
         externalCalls += 1;
         return new Response(JSON.stringify({ trace: modelTrace }), { status: 200 });
       },
@@ -143,7 +153,9 @@ describe('model adapter', () => {
     const result = await requestModelTrace(request, seedTrace, {
       adapterUrl: 'http://127.0.0.1:8600',
       providerSelection: 'auto',
-      fetchImpl: async () => new Response(JSON.stringify({ trace: { ...seedTrace, outputType: 'python' } }), { status: 200 }),
+      fetchImpl: async (url) => String(url).endsWith('/api/health')
+        ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+        : new Response(JSON.stringify({ trace: { ...seedTrace, outputType: 'python' } }), { status: 200 }),
       modelTraceProvider: async () => {
         workerCalls += 1;
         return modelTrace;
@@ -159,6 +171,7 @@ describe('model adapter', () => {
     const diagnostics = await getModelProviderDiagnostics({
       adapterUrl: 'http://secret-host.example:8600/private',
       providerSelection: 'auto',
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
       modelTraceProvider: async () => null,
       timeoutMs: 50
     });
@@ -170,5 +183,23 @@ describe('model adapter', () => {
       'fallback'
     ]);
     expect(JSON.stringify(diagnostics)).not.toContain('secret-host');
+  });
+
+  it('reports unavailable providers when the external adapter health check fails', async () => {
+    const diagnostics = await getModelProviderDiagnostics({
+      adapterUrl: 'http://127.0.0.1:8600',
+      providerSelection: 'auto',
+      fetchImpl: async () => {
+        throw new Error('connect ECONNREFUSED 127.0.0.1:8600');
+      },
+      modelTraceProvider: async () => null,
+      timeoutMs: 50
+    });
+
+    expect(diagnostics.providers.find((provider) => provider.id === 'external-adapter')).toMatchObject({
+      configured: true,
+      available: false,
+      reason: 'connect ECONNREFUSED 127.0.0.1:8600'
+    });
   });
 });
