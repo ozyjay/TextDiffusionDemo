@@ -57,8 +57,11 @@ Set up the local Python runtime on Fedora/Linux:
 ```bash
 python3 -m venv .venv-diffusiongemma
 .venv-diffusiongemma/bin/python -m pip install -U pip
+.venv-diffusiongemma/bin/python -m pip install -r adapters/diffusiongemma_adapter/requirements-fedora-rocm.txt
 .venv-diffusiongemma/bin/python -m pip install -r adapters/diffusiongemma_adapter/requirements-fedora.txt
 ```
+
+The first install command intentionally uses PyTorch's ROCm wheel index and pins the ROCm build versions available from that index. This avoids accidentally installing CPU-only PyTorch on the Framework Desktop.
 
 Set up the local Python runtime on macOS / Apple Silicon:
 
@@ -73,6 +76,7 @@ Windows PowerShell:
 ```powershell
 py -3 -m venv .venv-diffusiongemma
 .\.venv-diffusiongemma\Scripts\python.exe -m pip install -U pip
+.\.venv-diffusiongemma\Scripts\python.exe -m pip install -r adapters\diffusiongemma_adapter\requirements-fedora-rocm.txt
 .\.venv-diffusiongemma\Scripts\python.exe -m pip install -r adapters\diffusiongemma_adapter\requirements-fedora.txt
 ```
 
@@ -129,6 +133,7 @@ curl http://127.0.0.1:8300/api/model-providers
 Fedora/Linux smoke test:
 
 ```bash
+.venv-diffusiongemma/bin/python -c "import torch; print(torch.__version__, torch.version.hip, torch.cuda.is_available())"
 PYTHONPATH=adapters/diffusiongemma_adapter DIFFUSIONGEMMA_ENGINE=transformers \
   .venv-diffusiongemma/bin/python -c "from diffusiongemma_adapter.engine_factory import create_engine; print(type(create_engine()).__name__)"
 ```

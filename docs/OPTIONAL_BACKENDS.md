@@ -172,6 +172,7 @@ DIFFUSIONGEMMA_ENGINE=auto
 ```
 
 - `hf-diffusiongemma` uses Hugging Face Transformers and is the preferred Fedora/Linux experiment path.
+- On Fedora/Linux with AMD graphics, install PyTorch from `requirements-fedora-rocm.txt` before the generic Hugging Face packages so the adapter gets ROCm-enabled Torch rather than CPU-only Torch.
 - `mlx-diffusiongemma` uses MLX and is the preferred macOS / Apple Silicon experiment path.
 - `auto` keeps the external adapter first, then prefers the platform-appropriate local worker, then falls back.
 
