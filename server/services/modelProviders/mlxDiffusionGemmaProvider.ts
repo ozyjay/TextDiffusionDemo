@@ -19,7 +19,10 @@ export class MlxDiffusionGemmaProvider extends BaseModelProvider implements Mode
   readonly label = 'MLX DiffusionGemma';
   readonly kind = 'local-worker' as const;
 
-  constructor(private readonly workerProvider: WorkerTraceProvider = requestMlxDiffusionGemmaTrace) {
+  constructor(
+    private readonly workerProvider: WorkerTraceProvider = requestMlxDiffusionGemmaTrace,
+    private readonly platform: NodeJS.Platform = process.platform
+  ) {
     super();
   }
 
@@ -33,6 +36,14 @@ export class MlxDiffusionGemmaProvider extends BaseModelProvider implements Mode
         configured: true,
         available: true,
         reason: 'Custom worker provider configured.'
+      });
+    }
+
+    if (this.platform !== 'darwin') {
+      return this.updateAvailability({
+        configured: true,
+        available: false,
+        reason: 'MLX DiffusionGemma is only enabled by default on macOS.'
       });
     }
 
@@ -62,7 +73,10 @@ export class HfDiffusionGemmaProvider extends BaseModelProvider implements Model
   readonly label = 'HF Transformers DiffusionGemma';
   readonly kind = 'local-worker' as const;
 
-  constructor(private readonly workerProvider: WorkerTraceProvider = requestHfDiffusionGemmaTrace) {
+  constructor(
+    private readonly workerProvider: WorkerTraceProvider = requestHfDiffusionGemmaTrace,
+    private readonly _platform: NodeJS.Platform = process.platform
+  ) {
     super();
   }
 

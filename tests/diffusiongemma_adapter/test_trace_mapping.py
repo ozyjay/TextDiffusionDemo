@@ -8,7 +8,7 @@ from diffusiongemma_adapter.trace_mapping import (
 
 
 class TraceMappingTests(unittest.TestCase):
-    def test_build_trace_from_final_preserves_intermediate_stages(self):
+    def test_build_trace_from_final_synthesizes_model_assisted_stages(self):
         seed_trace = {
             "id": "robot-orientation-story-clear",
             "promptId": "robot-orientation-story",
@@ -33,12 +33,14 @@ class TraceMappingTests(unittest.TestCase):
         trace = build_trace_from_final(seed_trace, "new model final")
 
         self.assertEqual(trace["id"], "robot-orientation-story-diffusiongemma")
-        self.assertEqual([stage["text"] for stage in trace["stages"][:-1]], [
-            "noise",
-            "rough",
-            "clear",
-            "styled",
+        self.assertEqual([stage["label"] for stage in trace["stages"]], [
+            "Noise",
+            "Rough",
+            "Clear",
+            "Styled",
+            "Final",
         ])
+        self.assertIn("robot", trace["stages"][0]["text"])
         self.assertEqual(trace["stages"][-1]["label"], "Final")
         self.assertEqual(trace["stages"][-1]["text"], "new model final")
         self.assertIn("DiffusionGemma", trace["stages"][-1]["note"])
@@ -47,6 +49,10 @@ class TraceMappingTests(unittest.TestCase):
         text = "```text\n<bos> A concise answer. <eos>\n```"
 
         self.assertEqual(clean_generated_text(text), "A concise answer.")
+
+    def test_clean_generated_text_removes_leaked_channel_labels(self):
+        self.assertEqual(clean_generated_text("thought\nA concise answer."), "A concise answer.")
+        self.assertEqual(clean_generated_text("thought\nscratchpad\nfinal\nA concise answer."), "A concise answer.")
 
     def test_build_trace_from_final_uses_safe_fallback_when_output_is_empty(self):
         seed_trace = {

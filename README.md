@@ -63,6 +63,8 @@ python3 -m venv .venv-diffusiongemma
 
 The first install command intentionally uses PyTorch's ROCm wheel index and pins the ROCm build versions available from that index. This avoids accidentally installing CPU-only PyTorch on the Framework Desktop.
 
+On Fedora systems where the PyTorch ROCm wheel bundles an older HSA runtime than the host ROCm packages, the worker launcher automatically preloads `/usr/lib64/libhsa-runtime64.so.1` for the Linux Transformers runtime when that file exists. This avoids first-allocation crashes in the wheel-bundled `libhsa-runtime64.so`. To use a different HSA runtime path, set `DIFFUSIONGEMMA_HSA_RUNTIME_PRELOAD`; to manage preloads yourself, set `LD_PRELOAD` before starting the app.
+
 Set up the local Python runtime on macOS / Apple Silicon:
 
 ```bash
@@ -108,6 +110,7 @@ DIFFUSIONGEMMA_ENGINE=auto
 DIFFUSIONGEMMA_MODEL=google/diffusiongemma-26B-A4B-it
 MODEL_PROVIDER=auto
 MODEL_ADAPTER_TIMEOUT_MS=30000
+MODEL_WORKER_TIMEOUT_MS=300000
 ```
 
 Leave `DIFFUSIONGEMMA_PYTHON` unset to use the project virtualenv default for the current OS. Override it only when the Python executable lives somewhere else:
@@ -120,9 +123,11 @@ DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
 $env:DIFFUSIONGEMMA_PYTHON = ".\.venv-diffusiongemma\Scripts\python.exe"
 ```
 
-`MODEL_PROVIDER` can be `auto`, `external-adapter`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend tries a configured external adapter first, then a local DiffusionGemma worker, then falls back safely. On Fedora/Linux, `auto` prefers the Hugging Face Transformers worker. On macOS, `auto` prefers the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
+`MODEL_PROVIDER` can be `auto`, `external-adapter`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend tries a configured external adapter first, then the platform-appropriate local DiffusionGemma worker, then falls back safely. On Fedora/Linux and Windows, `auto` enables the Hugging Face Transformers worker. On macOS, `auto` enables the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
 
 `DIFFUSIONGEMMA_ENGINE` can be `auto`, `transformers`, or `mlx`. Leave it as `auto` unless you are explicitly testing one runtime.
+
+The HTTP adapter timeout stays short so unavailable external services fail over quickly. The local worker timeout is separate because the first request may need to load the 26B model before it can generate; set `MODEL_WORKER_TIMEOUT_MS` higher if the server log says the worker timed out while the model was still loading.
 
 Provider diagnostics are available for staff/debug tooling:
 
@@ -133,7 +138,8 @@ curl http://127.0.0.1:8300/api/model-providers
 Fedora/Linux smoke test:
 
 ```bash
-.venv-diffusiongemma/bin/python -c "import torch; print(torch.__version__, torch.version.hip, torch.cuda.is_available())"
+LD_PRELOAD=/usr/lib64/libhsa-runtime64.so.1 \
+  .venv-diffusiongemma/bin/python -c "import torch; x=torch.ones((2,2), device='cuda'); print(torch.__version__, torch.version.hip, x.device)"
 PYTHONPATH=adapters/diffusiongemma_adapter DIFFUSIONGEMMA_ENGINE=transformers \
   .venv-diffusiongemma/bin/python -c "from diffusiongemma_adapter.engine_factory import create_engine; print(type(create_engine()).__name__)"
 ```

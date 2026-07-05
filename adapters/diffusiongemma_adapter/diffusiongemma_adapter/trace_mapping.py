@@ -15,10 +15,18 @@ def build_trace_from_final(seed_trace: dict[str, Any], final_text: str) -> dict[
         raise ValueError("seedTrace must contain five stages")
 
     fallback_final = str(stages[-1].get("text", "")).strip()
+    final = cleaned_final or fallback_final or "No model output was generated."
+    if cleaned_final:
+        return {
+            **seed_trace,
+            "id": f"{seed_trace['promptId']}-diffusiongemma",
+            "stages": synthesize_stages_from_final(seed_trace, final),
+        }
+
     final_stage = {
         **stages[-1],
         "label": "Final",
-        "text": cleaned_final or fallback_final or "No model output was generated.",
+        "text": final,
         "note": FINAL_NOTE,
     }
 
@@ -93,4 +101,81 @@ def clean_generated_text(text: str) -> str:
     text = text.replace("<bos>", "").replace("<eos>", "")
     text = text.replace("<s>", "").replace("</s>", "")
     text = text.replace("[PAD]", "").replace("[UNK]", "")
+    text = strip_channel_labels(text)
     return text.strip()
+
+
+def strip_channel_labels(text: str) -> str:
+    lines = [line.strip() for line in text.splitlines()]
+    while lines and not lines[0]:
+        lines.pop(0)
+    if not lines:
+        return ""
+
+    lowered = [line.lower().rstrip(":") for line in lines]
+    for label in ("final", "answer"):
+        if label in lowered:
+            index = lowered.index(label)
+            tail = "\n".join(lines[index + 1 :]).strip()
+            if tail:
+                return tail
+
+    if lowered[0] in {"thought", "analysis", "assistant", "model", "final", "answer"}:
+        return "\n".join(lines[1:]).strip()
+
+    return text
+
+
+def synthesize_stages_from_final(seed_trace: dict[str, Any], final_text: str) -> list[dict[str, str]]:
+    prompt = str(seed_trace.get("prompt", "")).strip()
+    noise = build_noise_line(prompt, final_text)
+    sentences = split_sentences(final_text)
+    rough = sentences[0] if sentences else final_text
+    clear = " ".join(sentences[:2]) if len(sentences) > 1 else final_text
+
+    return [
+        {
+            "label": "Noise",
+            "text": noise,
+            "note": "The live model output is converted into a noisy starting point for the public demo.",
+        },
+        {
+            "label": "Rough",
+            "text": rough,
+            "note": "A first readable idea appears from the model-assisted result.",
+        },
+        {
+            "label": "Clear",
+            "text": clear,
+            "note": "The draft becomes clearer before the final pass.",
+        },
+        {
+            "label": "Styled",
+            "text": final_text,
+            "note": "The live model result is shown as a styled whole-text revision.",
+        },
+        {
+            "label": "Final",
+            "text": final_text,
+            "note": FINAL_NOTE,
+        },
+    ]
+
+
+def build_noise_line(prompt: str, final_text: str) -> str:
+    words: list[str] = []
+    for source in (prompt, final_text):
+        for word in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", source):
+            lower = word.lower()
+            if lower in {"the", "and", "for", "with", "that", "this", "from", "into", "about", "write", "short"}:
+                continue
+            if lower not in words:
+                words.append(lower)
+            if len(words) >= 8:
+                return " / ".join(words[:4] + ["???"] + words[4:])
+    return " / ".join(words + ["???"]) if words else "idea / draft / ??? / final"
+
+
+def split_sentences(text: str) -> list[str]:
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+    return sentences or ([text.strip()] if text.strip() else [])

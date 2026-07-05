@@ -32,10 +32,10 @@ describe('Express API', () => {
       .expect(200);
 
     expect(response.body.providerSelection).toBe('auto');
+    const platformLocalProvider = process.platform === 'darwin' ? 'mlx-diffusiongemma' : 'hf-diffusiongemma';
     expect(response.body.providers.map((provider: { id: string }) => provider.id)).toEqual([
       'external-adapter',
-      'hf-diffusiongemma',
-      'mlx-diffusiongemma',
+      platformLocalProvider,
       'fallback'
     ]);
     expect(JSON.stringify(response.body)).not.toContain('secret-host');
@@ -155,6 +155,7 @@ describe('Express API', () => {
 
     expect(requestedSteps).toBe(7);
     expect(response.body.mode).toBe('model-assisted');
+    expect(response.body.trace.controls.steps).toBe(7);
     expect(response.body.trace.stages.map((stage: { label: string }) => stage.label)).toEqual([
       'Mask 0/8',
       'Denoise 2/8',
@@ -299,6 +300,7 @@ describe('Express API', () => {
     const response = await request(createApp({
       modelAdapterUrl: 'http://127.0.0.1:8600',
       modelAdapterTimeoutMs: 1,
+      modelTraceProvider: async () => null,
       fetchImpl: async (_url, init) => {
         await new Promise((resolve, reject) => {
           const signal = init?.signal as AbortSignal | undefined;

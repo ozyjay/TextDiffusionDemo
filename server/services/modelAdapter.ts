@@ -8,6 +8,7 @@ import {
 } from './modelProviders/mlxDiffusionGemmaProvider';
 import {
   getProviderDiagnostics,
+  normaliseProviderSelection,
   resolveModelTrace
 } from './modelProviders/resolver';
 import type { ModelTraceProviderStrategy, ProviderDiagnostics } from './modelProviders/types';
@@ -18,9 +19,11 @@ export interface ModelAdapterOptions {
   adapterUrl?: string;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
+  workerTimeoutMs?: number;
   providerSelection?: string;
   modelTraceProvider?: WorkerTraceProvider;
   providers?: ModelTraceProviderStrategy[];
+  platform?: NodeJS.Platform;
 }
 
 export async function requestModelTrace(
@@ -29,9 +32,12 @@ export async function requestModelTrace(
   options: ModelAdapterOptions = {}
 ): Promise<Trace | null> {
   const providers = options.providers ?? createDefaultProviders(options);
+  const timeoutMs = options.timeoutMs ?? 30000;
+  const workerTimeoutMs = options.workerTimeoutMs ?? 300000;
   return resolveModelTrace(request, seedTrace, providers, {
     selection: options.providerSelection ?? process.env.MODEL_PROVIDER,
-    timeoutMs: options.timeoutMs ?? 30000
+    timeoutMs,
+    providerTimeoutMs: (provider) => provider.kind === 'local-worker' ? workerTimeoutMs : timeoutMs
   });
 }
 
@@ -43,15 +49,25 @@ export async function getModelProviderDiagnostics(
 }
 
 function createDefaultProviders(options: ModelAdapterOptions): ModelTraceProviderStrategy[] {
-  const localProviders: ModelTraceProviderStrategy[] = process.platform === 'darwin'
-    ? [
-        new MlxDiffusionGemmaProvider(options.modelTraceProvider),
-        new HfDiffusionGemmaProvider(options.modelTraceProvider)
-      ]
-    : [
-        new HfDiffusionGemmaProvider(options.modelTraceProvider),
-        new MlxDiffusionGemmaProvider(options.modelTraceProvider)
-      ];
+  const platform = options.platform ?? process.platform;
+  const selection = normaliseProviderSelection(options.providerSelection ?? process.env.MODEL_PROVIDER);
+  const localProviders: ModelTraceProviderStrategy[] = platform === 'darwin'
+    ? [new MlxDiffusionGemmaProvider(options.modelTraceProvider, platform)]
+    : [new HfDiffusionGemmaProvider(options.modelTraceProvider, platform)];
+
+  if (
+    selection === 'mlx-diffusiongemma' &&
+    !localProviders.some((provider) => provider.id === 'mlx-diffusiongemma')
+  ) {
+    localProviders.push(new MlxDiffusionGemmaProvider(options.modelTraceProvider, platform));
+  }
+
+  if (
+    selection === 'hf-diffusiongemma' &&
+    !localProviders.some((provider) => provider.id === 'hf-diffusiongemma')
+  ) {
+    localProviders.push(new HfDiffusionGemmaProvider(options.modelTraceProvider, platform));
+  }
 
   return [
     new ExternalAdapterProvider(options.adapterUrl ?? process.env.MODEL_ADAPTER_URL, options.fetchImpl),

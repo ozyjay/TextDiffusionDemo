@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getModelProviderDiagnostics, requestModelTrace } from '../../server/services/modelAdapter';
+import type { ModelTraceProviderStrategy, ProviderAvailability, ProviderStatus } from '../../server/services/modelProviders/types';
 import { refineTrace } from '../../server/services/traceService';
 import type { RefineRequest } from '../../shared/types';
 
@@ -15,6 +16,33 @@ const request: RefineRequest = {
 };
 
 describe('model adapter', () => {
+  function createFakeProvider(
+    details: Pick<ModelTraceProviderStrategy, 'id' | 'label' | 'kind'>,
+    refine: ModelTraceProviderStrategy['refine'],
+    availability: ProviderAvailability = { configured: true, available: true }
+  ): ModelTraceProviderStrategy {
+    let status: ProviderStatus = {
+      id: details.id,
+      label: details.label,
+      kind: details.kind,
+      configured: availability.configured,
+      available: availability.available,
+      reason: availability.reason,
+      lastOutcome: 'not-run'
+    };
+
+    return {
+      ...details,
+      supports: () => true,
+      isAvailable: async () => availability,
+      refine,
+      lastStatus: () => status,
+      setStatus: (lastOutcome, lastReason) => {
+        status = { ...status, lastOutcome, lastReason };
+      }
+    };
+  }
+
   it('returns a validated staged trace from a local adapter', async () => {
     const seedTrace = refineTrace(request);
     const modelTrace = {
@@ -73,6 +101,7 @@ describe('model adapter', () => {
       fetchImpl: async (url) => String(url).endsWith('/api/health')
         ? new Response(JSON.stringify({ ok: true }), { status: 200 })
         : new Response(JSON.stringify({ error: 'story output only' }), { status: 503 }),
+      modelTraceProvider: async () => null,
       timeoutMs: 50
     });
 
@@ -91,6 +120,7 @@ describe('model adapter', () => {
       fetchImpl: async (url) => String(url).endsWith('/api/health')
         ? new Response(JSON.stringify({ ok: true }), { status: 200 })
         : new Response(JSON.stringify({ trace: mismatchedTrace }), { status: 200 }),
+      modelTraceProvider: async () => null,
       timeoutMs: 50
     });
 
@@ -167,23 +197,84 @@ describe('model adapter', () => {
     expect(workerCalls).toBe(1);
   });
 
+  it('uses the longer worker timeout only for local worker providers', async () => {
+    const seedTrace = refineTrace(request);
+    const seenTimeouts: number[] = [];
+    const providers: ModelTraceProviderStrategy[] = [
+      createFakeProvider(
+        { id: 'external-adapter', label: 'External model adapter', kind: 'external' },
+        async (_request, _seedTrace, timeoutMs) => {
+          seenTimeouts.push(timeoutMs);
+          return null;
+        }
+      ),
+      createFakeProvider(
+        { id: 'hf-diffusiongemma', label: 'HF Transformers DiffusionGemma', kind: 'local-worker' },
+        async (_request, _seedTrace, timeoutMs) => {
+          seenTimeouts.push(timeoutMs);
+          return null;
+        }
+      )
+    ];
+
+    await requestModelTrace(request, seedTrace, {
+      providers,
+      timeoutMs: 50,
+      workerTimeoutMs: 5000
+    });
+
+    expect(seenTimeouts).toEqual([50, 5000]);
+  });
+
   it('reports provider diagnostics without exposing adapter URLs', async () => {
     const diagnostics = await getModelProviderDiagnostics({
       adapterUrl: 'http://secret-host.example:8600/private',
       providerSelection: 'auto',
       fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
       modelTraceProvider: async () => null,
-      timeoutMs: 50
+      timeoutMs: 50,
+      platform: 'linux'
     });
 
     expect(diagnostics.providerSelection).toBe('auto');
     expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
       'external-adapter',
       'hf-diffusiongemma',
-      'mlx-diffusiongemma',
       'fallback'
     ]);
     expect(JSON.stringify(diagnostics)).not.toContain('secret-host');
+  });
+
+  it('uses only the MLX local provider in auto mode on macOS', async () => {
+    const diagnostics = await getModelProviderDiagnostics({
+      adapterUrl: '',
+      providerSelection: 'auto',
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      modelTraceProvider: async () => null,
+      timeoutMs: 50,
+      platform: 'darwin'
+    });
+
+    expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
+      'external-adapter',
+      'mlx-diffusiongemma',
+      'fallback'
+    ]);
+  });
+
+  it('reports explicit MLX selection as unavailable on non-macOS by default', async () => {
+    const diagnostics = await getModelProviderDiagnostics({
+      adapterUrl: '',
+      providerSelection: 'mlx-diffusiongemma',
+      fetchImpl: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      timeoutMs: 50,
+      platform: 'linux'
+    });
+
+    expect(diagnostics.providers.find((provider) => provider.id === 'mlx-diffusiongemma')).toMatchObject({
+      available: false,
+      reason: 'MLX DiffusionGemma is only enabled by default on macOS.'
+    });
   });
 
   it('reports unavailable providers when the external adapter health check fails', async () => {

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it } from 'vitest';
 import {
+  buildDiffusionGemmaWorkerEnv,
   defaultDiffusionGemmaEngine,
   defaultDiffusionGemmaPythonPath,
   DiffusionGemmaWorkerClient
@@ -46,6 +47,33 @@ describe('DiffusionGemma worker client', () => {
     expect(defaultDiffusionGemmaEngine('linux')).toBe('transformers');
     expect(defaultDiffusionGemmaEngine('win32')).toBe('transformers');
     expect(defaultDiffusionGemmaEngine('darwin')).toBe('mlx');
+  });
+
+  it('preloads the system HSA runtime for Linux Transformers workers when available', () => {
+    const env = buildDiffusionGemmaWorkerEnv(
+      'transformers',
+      'test-model',
+      { PYTHONPATH: 'existing-path' },
+      'linux',
+      '/demo',
+      (filePath) => filePath === '/usr/lib64/libhsa-runtime64.so.1'
+    );
+
+    expect(env.LD_PRELOAD).toBe('/usr/lib64/libhsa-runtime64.so.1');
+    expect(env.PYTHONPATH).toBe('/demo/adapters/diffusiongemma_adapter:existing-path');
+  });
+
+  it('does not replace an explicit LD_PRELOAD setting', () => {
+    const env = buildDiffusionGemmaWorkerEnv(
+      'transformers',
+      'test-model',
+      { LD_PRELOAD: '/custom/lib.so' },
+      'linux',
+      '/demo',
+      () => true
+    );
+
+    expect(env.LD_PRELOAD).toBe('/custom/lib.so');
   });
 
   it('sends JSON requests to the Python worker and returns validated traces', async () => {

@@ -21,6 +21,7 @@ export type ModelTraceProvider = (
 export interface AppOptions {
   modelAdapterUrl?: string;
   modelAdapterTimeoutMs?: number;
+  modelWorkerTimeoutMs?: number;
   modelProvider?: string;
   fetchImpl?: typeof fetch;
   modelTraceProvider?: ModelTraceProvider;
@@ -58,6 +59,7 @@ export function createApp(options: AppOptions = {}) {
       adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
       fetchImpl: options.fetchImpl,
       timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
+      workerTimeoutMs: options.modelWorkerTimeoutMs ?? envNumber('MODEL_WORKER_TIMEOUT_MS', 300000),
       providerSelection: options.modelProvider ?? process.env.MODEL_PROVIDER,
       modelTraceProvider: options.modelTraceProvider
     }));
@@ -139,9 +141,7 @@ async function resolveRefinement(
   const customPrompt = refineRequest.mode === 'model-assisted'
     ? normaliseCustomPrompt(refineRequest)
     : null;
-  const seedTrace = customPrompt
-    ? { ...refineTrace(refineRequest), prompt: customPrompt }
-    : refineTrace(refineRequest);
+  const seedTrace = buildSeedTrace(refineRequest, customPrompt);
 
   if (refineRequest.mode === 'model-assisted') {
     if (refineRequest.outputType !== 'story') {
@@ -152,6 +152,7 @@ async function resolveRefinement(
       adapterUrl: options.modelAdapterUrl ?? process.env.MODEL_ADAPTER_URL,
       fetchImpl: options.fetchImpl,
       timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
+      workerTimeoutMs: options.modelWorkerTimeoutMs ?? envNumber('MODEL_WORKER_TIMEOUT_MS', 300000),
       providerSelection: options.modelProvider ?? process.env.MODEL_PROVIDER,
       modelTraceProvider: options.modelTraceProvider
     });
@@ -166,6 +167,21 @@ async function resolveRefinement(
   return {
     mode: seedTrace.id.endsWith('-template') ? 'template' : 'scripted',
     trace: seedTrace
+  };
+}
+
+function buildSeedTrace(refineRequest: RefineRequest, promptOverride: string | null): Trace {
+  const trace = refineTrace(refineRequest);
+  return {
+    ...trace,
+    prompt: promptOverride ?? trace.prompt,
+    style: refineRequest.style,
+    controls: {
+      creativity: refineRequest.creativity,
+      length: refineRequest.length,
+      constraint: refineRequest.constraint,
+      steps: refineRequest.steps
+    }
   };
 }
 

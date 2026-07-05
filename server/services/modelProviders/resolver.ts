@@ -11,6 +11,7 @@ export type ProviderSelection = ModelProviderId | 'auto';
 export interface ResolveOptions {
   selection?: string;
   timeoutMs: number;
+  providerTimeoutMs?: (provider: ModelTraceProviderStrategy) => number;
 }
 
 export async function resolveModelTrace(
@@ -33,7 +34,8 @@ export async function resolveModelTrace(
       continue;
     }
 
-    const trace = await provider.refine(request, seedTrace, options.timeoutMs);
+    const timeoutMs = options.providerTimeoutMs?.(provider) ?? options.timeoutMs;
+    const trace = await provider.refine(request, seedTrace, timeoutMs);
     if (!trace) {
       if (provider.lastStatus().lastOutcome === 'not-run') {
         provider.setStatus('no-trace', 'Provider returned no trace.');

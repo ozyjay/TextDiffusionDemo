@@ -1,5 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import type { RefineRequest, Trace } from '../../shared/types';
 import { validateTrace } from './traceService';
@@ -46,6 +48,10 @@ export class DiffusionGemmaWorkerClient {
     return new Promise<Trace | null>((resolve) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
+        this.writeDiagnostic(
+          `request timed out after ${timeoutMs}ms; the model may still be loading. ` +
+            'Increase MODEL_WORKER_TIMEOUT_MS for first-run local model loads.'
+        );
         resolve(null);
       }, timeoutMs);
 
@@ -65,15 +71,7 @@ export class DiffusionGemmaWorkerClient {
       return this.process;
     }
 
-    const env = {
-      ...process.env,
-      DIFFUSIONGEMMA_ENGINE: this.engine,
-      DIFFUSIONGEMMA_MODEL: this.modelId,
-      PYTHONPATH: [
-        path.join(process.cwd(), 'adapters/diffusiongemma_adapter'),
-        process.env.PYTHONPATH
-      ].filter(Boolean).join(path.delimiter)
-    };
+    const env = buildDiffusionGemmaWorkerEnv(this.engine, this.modelId);
 
     const child = this.spawnImpl(this.pythonPath, ['-m', 'diffusiongemma_adapter.worker'], {
       cwd: process.cwd(),
@@ -84,8 +82,8 @@ export class DiffusionGemmaWorkerClient {
     child.stdout.on('data', (chunk: Buffer | string) => {
       this.handleStdout(String(chunk));
     });
-    child.stderr.on('data', () => {
-      // Drain stderr so model loader progress or warnings cannot block the worker.
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      this.writeDiagnostic(String(chunk).trimEnd());
     });
     child.on('exit', () => {
       this.process = null;
@@ -148,6 +146,13 @@ export class DiffusionGemmaWorkerClient {
       this.pending.delete(id);
     }
   }
+
+  private writeDiagnostic(message: string) {
+    if (!message || process.env.DIFFUSIONGEMMA_WORKER_QUIET === '1') {
+      return;
+    }
+    process.stderr.write(`[diffusiongemma:${this.engine}] ${message}\n`);
+  }
 }
 
 const defaultClient = new DiffusionGemmaWorkerClient();
@@ -182,6 +187,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function buildDiffusionGemmaWorkerEnv(
+  engine: string,
+  modelId: string,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+  platform = os.platform(),
+  cwd = process.cwd(),
+  fileExists: (path: string) => boolean = existsSync
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    DIFFUSIONGEMMA_ENGINE: engine,
+    DIFFUSIONGEMMA_MODEL: modelId,
+    PYTHONPATH: [
+      path.join(cwd, 'adapters/diffusiongemma_adapter'),
+      baseEnv.PYTHONPATH
+    ].filter(Boolean).join(path.delimiter)
+  };
+
+  const hsaRuntimePath = baseEnv.DIFFUSIONGEMMA_HSA_RUNTIME_PRELOAD ?? '/usr/lib64/libhsa-runtime64.so.1';
+  const shouldPreloadSystemHsa =
+    platform === 'linux' &&
+    normaliseEngine(engine) === 'transformers' &&
+    !baseEnv.LD_PRELOAD &&
+    hsaRuntimePath &&
+    fileExists(hsaRuntimePath);
+
+  if (shouldPreloadSystemHsa) {
+    env.LD_PRELOAD = hsaRuntimePath;
+  }
+
+  return env;
+}
+
 export function defaultDiffusionGemmaPythonPath(platform = process.platform): string {
   return platform === 'win32'
     ? '.venv-diffusiongemma\\Scripts\\python.exe'
@@ -190,4 +228,9 @@ export function defaultDiffusionGemmaPythonPath(platform = process.platform): st
 
 export function defaultDiffusionGemmaEngine(platform = process.platform): string {
   return platform === 'darwin' ? 'mlx' : 'transformers';
+}
+
+function normaliseEngine(engine: string): string {
+  const normalised = engine.trim().toLowerCase();
+  return ['hf', 'huggingface'].includes(normalised) ? 'transformers' : normalised;
 }

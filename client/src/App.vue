@@ -181,7 +181,8 @@ async function runDemo(nextMode = 'scripted') {
     request.customPrompt = trimmedCustomPrompt.value;
   }
 
-  streamAbortController = new AbortController();
+  const currentStreamController = new AbortController();
+  streamAbortController = currentStreamController;
   activeTrace.value = createStreamingTrace(request);
   activeIndex.value = -1;
   mode.value = nextMode === 'replay' ? 'replay' : 'streaming';
@@ -196,18 +197,20 @@ async function runDemo(nextMode = 'scripted') {
         activeTrace.value.stages[index] = stage;
         activeIndex.value = index;
       },
-      streamAbortController.signal
+      currentStreamController.signal
     );
     activeTrace.value = response.trace;
     mode.value = nextMode === 'replay' ? 'replay' : response.mode;
     activeIndex.value = Math.max(response.trace.stages.length - 1, 0);
   } catch {
-    if (!streamAbortController.signal.aborted) {
+    if (!currentStreamController.signal.aborted) {
       isRunning.value = false;
     }
     return;
   } finally {
-    streamAbortController = undefined;
+    if (streamAbortController === currentStreamController) {
+      streamAbortController = undefined;
+    }
   }
 
   isRunning.value = false;
