@@ -2,6 +2,10 @@ import type { RefineRequest, Trace } from '../../shared/types';
 import { ExternalAdapterProvider } from './modelProviders/externalAdapterProvider';
 import { FallbackProvider } from './modelProviders/fallbackProvider';
 import {
+  preloadHfDiffusionGemma,
+  preloadMlxDiffusionGemma
+} from './diffusionGemmaWorker';
+import {
   HfDiffusionGemmaProvider,
   MlxDiffusionGemmaProvider,
   type WorkerTraceProvider
@@ -46,6 +50,43 @@ export async function getModelProviderDiagnostics(
 ): Promise<ProviderDiagnostics> {
   const providers = options.providers ?? createDefaultProviders(options);
   return getProviderDiagnostics(providers, options.providerSelection ?? process.env.MODEL_PROVIDER);
+}
+
+export async function preloadLocalModel(options: ModelAdapterOptions = {}): Promise<{
+  ok: boolean;
+  providerId: 'hf-diffusiongemma' | 'mlx-diffusiongemma';
+  reason?: string;
+}> {
+  const platform = options.platform ?? process.platform;
+  const selection = normaliseProviderSelection(options.providerSelection ?? process.env.MODEL_PROVIDER);
+  const timeoutMs = options.workerTimeoutMs ?? 600000;
+  const providerId = platform === 'darwin' ? 'mlx-diffusiongemma' : 'hf-diffusiongemma';
+
+  if (selection === 'external-adapter' || selection === 'fallback') {
+    return {
+      ok: false,
+      providerId,
+      reason: `MODEL_PROVIDER=${selection} does not use a local model worker.`
+    };
+  }
+
+  if (selection === 'mlx-diffusiongemma' && platform !== 'darwin') {
+    return {
+      ok: false,
+      providerId: 'mlx-diffusiongemma',
+      reason: 'MLX preload is only available on macOS.'
+    };
+  }
+
+  const ok = providerId === 'mlx-diffusiongemma'
+    ? await preloadMlxDiffusionGemma(timeoutMs)
+    : await preloadHfDiffusionGemma(timeoutMs);
+
+  return {
+    ok,
+    providerId,
+    reason: ok ? undefined : 'Local model worker did not report ready before the preload timeout.'
+  };
 }
 
 function createDefaultProviders(options: ModelAdapterOptions): ModelTraceProviderStrategy[] {

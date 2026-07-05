@@ -94,14 +94,14 @@ Windows PowerShell:
 .\scripts\pwsh\dev.ps1
 ```
 
-In the UI, use **Staff controls** to enable **Model-assisted**. The first request can take a little while while the backend starts:
+In the UI, use **Staff controls** to enable **Model-assisted**. For booth use, set `MODEL_PRELOAD=1` so the backend starts loading the local model as soon as the API starts:
 
 ```text
 macOS/Linux: .venv-diffusiongemma/bin/python -m diffusiongemma_adapter.worker
 Windows:     .venv-diffusiongemma\Scripts\python.exe -m diffusiongemma_adapter.worker
 ```
 
-Later requests reuse the warm worker. If the worker is unavailable, slow, invalid, or used on an unsupported lane, the app returns the safe fallback as `model-fallback`.
+The API begins listening immediately, then logs `[model] preload: ... ready` when the local worker has loaded the model. Later requests reuse the warm worker. If the worker is unavailable, slow, invalid, or used on an unsupported lane, the app returns the safe fallback as `model-fallback`.
 
 Useful environment overrides:
 
@@ -111,6 +111,8 @@ DIFFUSIONGEMMA_MODEL=google/diffusiongemma-26B-A4B-it
 MODEL_PROVIDER=auto
 MODEL_ADAPTER_TIMEOUT_MS=30000
 MODEL_WORKER_TIMEOUT_MS=300000
+MODEL_PRELOAD=1
+MODEL_PRELOAD_TIMEOUT_MS=600000
 ```
 
 Leave `DIFFUSIONGEMMA_PYTHON` unset to use the project virtualenv default for the current OS. Override it only when the Python executable lives somewhere else:
@@ -127,7 +129,7 @@ $env:DIFFUSIONGEMMA_PYTHON = ".\.venv-diffusiongemma\Scripts\python.exe"
 
 `DIFFUSIONGEMMA_ENGINE` can be `auto`, `transformers`, or `mlx`. Leave it as `auto` unless you are explicitly testing one runtime.
 
-The HTTP adapter timeout stays short so unavailable external services fail over quickly. The local worker timeout is separate because the first request may need to load the 26B model before it can generate; set `MODEL_WORKER_TIMEOUT_MS` higher if the server log says the worker timed out while the model was still loading.
+The HTTP adapter timeout stays short so unavailable external services fail over quickly. The local worker timeout is separate because a cold 26B model load can take a while. `MODEL_PRELOAD=1` sends a preload command to the local worker on backend startup, and `MODEL_PRELOAD_TIMEOUT_MS` controls how long startup logging waits for the ready signal.
 
 Provider diagnostics are available for staff/debug tooling:
 

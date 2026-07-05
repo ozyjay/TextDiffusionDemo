@@ -105,6 +105,35 @@ describe('DiffusionGemma worker client', () => {
     expect(trace?.stages.map((stage) => stage.label)).toEqual(['Mask 0/8', 'Final']);
   });
 
+  it('sends preload requests to the Python worker and resolves readiness', async () => {
+    const fakeProcess = new FakeWorkerProcess();
+    const client = new DiffusionGemmaWorkerClient({
+      spawnImpl: () => fakeProcess as never,
+      pythonPath: 'python3'
+    });
+    const promise = client.preload(1000);
+    const written = JSON.parse(fakeProcess.writes[0]);
+
+    fakeProcess.stdout.emit('data', `${JSON.stringify({
+      id: written.id,
+      ok: true,
+      ready: true
+    })}\n`);
+
+    await expect(promise).resolves.toBe(true);
+    expect(written.type).toBe('preload');
+  });
+
+  it('returns false when preload does not respond before the timeout', async () => {
+    const fakeProcess = new FakeWorkerProcess();
+    const client = new DiffusionGemmaWorkerClient({
+      spawnImpl: () => fakeProcess as never,
+      pythonPath: 'python3'
+    });
+
+    await expect(client.preload(1)).resolves.toBe(false);
+  });
+
   it('does not start the worker for unsupported Python requests', async () => {
     let spawned = false;
     const client = new DiffusionGemmaWorkerClient({

@@ -1,6 +1,6 @@
 import './registerEnv';
 import { createApp } from './app';
-import { getModelProviderDiagnostics } from './services/modelAdapter';
+import { getModelProviderDiagnostics, preloadLocalModel } from './services/modelAdapter';
 import { formatModelStatusLines } from './services/modelStatusConsole';
 
 const host = process.env.BACKEND_HOST ?? '127.0.0.1';
@@ -8,8 +8,30 @@ const port = Number(process.env.BACKEND_PORT ?? 8300);
 
 createApp().listen(port, host, () => {
   console.log(`Text Diffusion Lab API listening at http://${host}:${port}`);
-  void logModelStatus();
+  void bootModelStatus();
 });
+
+async function bootModelStatus(): Promise<void> {
+  await logModelStatus();
+  if (!envFlag('MODEL_PRELOAD', false)) {
+    console.log('[model] preload: disabled; set MODEL_PRELOAD=1 to load the local model at startup');
+    return;
+  }
+
+  const timeoutMs = envNumber('MODEL_PRELOAD_TIMEOUT_MS', envNumber('MODEL_WORKER_TIMEOUT_MS', 600000));
+  console.log(`[model] preload: starting local model preload with ${timeoutMs}ms timeout`);
+  const startedAt = Date.now();
+  const result = await preloadLocalModel({
+    providerSelection: process.env.MODEL_PROVIDER,
+    workerTimeoutMs: timeoutMs
+  });
+  const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+  if (result.ok) {
+    console.log(`[model] preload: ${result.providerId} ready after ${elapsedSeconds}s`);
+    return;
+  }
+  console.warn(`[model] preload: ${result.providerId} not ready after ${elapsedSeconds}s - ${result.reason}`);
+}
 
 async function logModelStatus(): Promise<void> {
   try {
@@ -27,4 +49,17 @@ async function logModelStatus(): Promise<void> {
       `[model] status unavailable: ${error instanceof Error ? error.message : 'unknown diagnostics error'}`
     );
   }
+}
+
+function envFlag(name: string, fallback: boolean): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) {
+    return fallback;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(value);
+}
+
+function envNumber(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }

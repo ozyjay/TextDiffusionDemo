@@ -8,10 +8,19 @@ import { validateTrace } from './traceService';
 
 type SpawnLike = typeof spawn;
 
-interface PendingRequest {
-  resolve: (trace: Trace | null) => void;
+interface PendingTraceRequest {
+  resolve: (value: Trace | boolean | null) => void;
   timeout: NodeJS.Timeout;
+  type: 'trace';
 }
+
+interface PendingPreloadRequest {
+  resolve: (value: Trace | boolean | null) => void;
+  timeout: NodeJS.Timeout;
+  type: 'preload';
+}
+
+type PendingRequest = PendingTraceRequest | PendingPreloadRequest;
 
 export interface DiffusionGemmaWorkerClientOptions {
   pythonPath?: string;
@@ -55,7 +64,34 @@ export class DiffusionGemmaWorkerClient {
         resolve(null);
       }, timeoutMs);
 
-      this.pending.set(id, { resolve, timeout });
+      this.pending.set(id, {
+        resolve: (value) => resolve(isTrace(value) ? value : null),
+        timeout,
+        type: 'trace'
+      });
+      worker.stdin.write(`${payload}\n`);
+    });
+  }
+
+  async preload(timeoutMs: number): Promise<boolean> {
+    const worker = this.ensureProcess();
+    const id = randomUUID();
+    const payload = JSON.stringify({ id, type: 'preload' });
+
+    return new Promise<boolean>((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pending.delete(id);
+        this.writeDiagnostic(
+          `preload timed out after ${timeoutMs}ms; increase MODEL_PRELOAD_TIMEOUT_MS if the model is still loading.`
+        );
+        resolve(false);
+      }, timeoutMs);
+
+      this.pending.set(id, {
+        resolve: (value) => resolve(value === true),
+        timeout,
+        type: 'preload'
+      });
       worker.stdin.write(`${payload}\n`);
     });
   }
@@ -127,6 +163,11 @@ export class DiffusionGemmaWorkerClient {
     clearTimeout(pending.timeout);
     this.pending.delete(message.id);
 
+    if (pending.type === 'preload') {
+      pending.resolve(message.ok === true && message.ready === true);
+      return;
+    }
+
     if (message.ok !== true || !isRecord(message.trace)) {
       pending.resolve(null);
       return;
@@ -183,8 +224,20 @@ export async function requestMlxDiffusionGemmaTrace(
   return mlxClient.requestTrace(request, seedTrace, timeoutMs);
 }
 
+export async function preloadHfDiffusionGemma(timeoutMs: number): Promise<boolean> {
+  return hfClient.preload(timeoutMs);
+}
+
+export async function preloadMlxDiffusionGemma(timeoutMs: number): Promise<boolean> {
+  return mlxClient.preload(timeoutMs);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isTrace(value: unknown): value is Trace {
+  return isRecord(value) && Array.isArray(value.stages);
 }
 
 export function buildDiffusionGemmaWorkerEnv(

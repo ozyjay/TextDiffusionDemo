@@ -64,6 +64,9 @@ class DiffusionGemmaEngine:
             "finalText": clean_generated_text("".join(final_parts)),
         }
 
+    def preload(self) -> None:
+        self._load()
+
     def _load(self):
         if self._model is not None and self._processor is not None:
             return self._model, self._processor

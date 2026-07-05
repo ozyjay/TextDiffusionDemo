@@ -27,6 +27,12 @@ def handle_line(line: str, engine: DiffusionGemmaEngine) -> dict[str, Any]:
         if not isinstance(request_id, str) or not request_id:
             request_id = "unknown"
 
+        if payload.get("type") == "preload":
+            preload = getattr(engine, "preload", None)
+            if callable(preload):
+                preload()
+            return {"id": request_id, "ok": True, "ready": True}
+
         request = payload["request"]
         seed_trace = payload["seedTrace"]
         if request.get("outputType") != "story":

@@ -21,18 +21,22 @@ class TransformersDiffusionGemmaEngine:
         options = build_generation_options(request)
         model, processor, torch = self._load()
         inputs = self._build_inputs(processor, prompt)
+        tokenizer = getattr(processor, "tokenizer", processor)
+        streamer = DiffusionDraftCollector(
+            tokenizer,
+            total_steps=options.max_denoising_steps,
+            capture_interval=options.diffusion_unmasking_interval,
+        )
 
         generation_kwargs = {
             "max_new_tokens": options.max_tokens,
-            "temperature": options.temperature,
-            "do_sample": options.temperature > 0,
+            "streamer": streamer,
         }
 
         # DiffusionGemma-capable Transformers builds may accept diffusion-specific
         # kwargs. Older/generic builds will reject them, so retry without them.
         diffusion_kwargs = {
             "max_denoising_steps": options.max_denoising_steps,
-            "block_length": options.block_length,
         }
 
         with self._lock:
@@ -43,9 +47,12 @@ class TransformersDiffusionGemmaEngine:
 
         generated = self._decode(processor, outputs, inputs, torch)
         return {
-            "snapshots": [],
+            "snapshots": streamer.snapshots,
             "finalText": clean_generated_text(generated),
         }
+
+    def preload(self) -> None:
+        self._load()
 
     def _load(self):
         if self._model is not None and self._processor is not None and self._torch is not None:
@@ -84,6 +91,13 @@ class TransformersDiffusionGemmaEngine:
         return model, processor, torch
 
     def _resolve_model_class(self):
+        try:
+            from transformers import AutoModelForMultimodalLM
+
+            return AutoModelForMultimodalLM
+        except ImportError:
+            pass
+
         try:
             from transformers import AutoModelForImageTextToText
 
@@ -142,3 +156,57 @@ class TransformersDiffusionGemmaEngine:
             if tokenizer and hasattr(tokenizer, "batch_decode"):
                 return tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
         return str(sequences)
+
+
+class DiffusionDraftCollector:
+    """Collects real DiffusionGemma draft canvases from Transformers generation."""
+
+    _takes_logits = False
+
+    def __init__(self, tokenizer, *, total_steps: int, capture_interval: int) -> None:
+        self.tokenizer = tokenizer
+        self.total_steps = max(1, total_steps)
+        self.capture_interval = max(1, capture_interval)
+        self.draft_count = 0
+        self.snapshots: list[dict[str, str]] = []
+
+    def put_draft(self, value, **_kwargs) -> None:
+        self.draft_count += 1
+        if not self._should_capture():
+            return
+
+        text = clean_generated_text(self._decode_tokens(value))
+        if not text:
+            return
+
+        self.snapshots.append({
+            "label": self._label(),
+            "text": text,
+        })
+
+    def put(self, _value) -> None:
+        return None
+
+    def end(self) -> None:
+        return None
+
+    def _should_capture(self) -> bool:
+        return (
+            self.draft_count == 1
+            or self.draft_count % self.capture_interval == 0
+            or self.draft_count >= self.total_steps
+        )
+
+    def _label(self) -> str:
+        if self.draft_count == 1:
+            return f"Mask 0/{self.total_steps}"
+        return f"Denoise {min(self.draft_count, self.total_steps)}/{self.total_steps}"
+
+    def _decode_tokens(self, value) -> str:
+        if hasattr(value, "shape") and len(value.shape) > 1:
+            value = value[0]
+        if hasattr(self.tokenizer, "decode"):
+            return self.tokenizer.decode(value, skip_special_tokens=True)
+        if hasattr(self.tokenizer, "batch_decode"):
+            return self.tokenizer.batch_decode(value, skip_special_tokens=True)[0]
+        return str(value)
