@@ -73,9 +73,10 @@ describe('public copy', () => {
     const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
 
     expect(appSource).toContain('Every frame');
+    expect(appSource).toContain('Token grid');
     expect(appSource).toContain('viewMode');
     expect(appSource).toContain('Frame');
-    expect(appSource).toContain("includeEveryFrame: viewMode.value === 'frames'");
+    expect(appSource).toContain("viewMode.value === 'frames' || viewMode.value === 'grid'");
     expect(appSource).toContain('v-model.number="steps"');
   });
 

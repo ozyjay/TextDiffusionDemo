@@ -41,6 +41,17 @@ describe('Express API', () => {
     expect(JSON.stringify(response.body)).not.toContain('secret-host');
   });
 
+  it('reports the current model runtime status', async () => {
+    const response = await request(app).get('/api/model-status').expect(200);
+
+    expect(response.body.status).toMatchObject({
+      state: 'fallback',
+      preloadEnabled: false
+    });
+    expect(response.body.status.message).toEqual(expect.any(String));
+    expect(response.body.status.updatedAt).toEqual(expect.any(String));
+  });
+
   it('returns ordered refinement stages for curated controls', async () => {
     const response = await request(app)
       .post('/api/refine')

@@ -1,4 +1,4 @@
-import type { PromptCard, RefineRequest, RefinementStage, Trace } from '../../../shared/types';
+import type { ModelRuntimeStatus, PromptCard, RefineRequest, RefinementStage, Trace } from '../../../shared/types';
 import { getLocalPrompts, getLocalTraces } from './localTraceStore';
 
 export async function fetchPrompts(): Promise<PromptCard[]> {
@@ -11,6 +11,24 @@ export async function fetchPrompts(): Promise<PromptCard[]> {
     return data.prompts;
   } catch {
     return getLocalPrompts();
+  }
+}
+
+export async function fetchModelStatus(): Promise<ModelRuntimeStatus> {
+  try {
+    const response = await fetch('/api/model-status');
+    if (!response.ok) {
+      throw new Error('Model status API unavailable.');
+    }
+    const data = (await response.json()) as { status: ModelRuntimeStatus };
+    return data.status;
+  } catch {
+    return {
+      state: 'fallback',
+      message: 'Model status unavailable; fallback traces remain available.',
+      updatedAt: new Date().toISOString(),
+      preloadEnabled: false
+    };
   }
 }
 

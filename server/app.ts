@@ -6,6 +6,7 @@ import {
   refineTrace
 } from './services/traceService';
 import { getModelProviderDiagnostics, requestModelTrace } from './services/modelAdapter';
+import { getModelRuntimeStatus } from './services/modelRuntimeStatus';
 import type { RefineRequest } from '../shared/types';
 import type { Trace } from '../shared/types';
 
@@ -63,6 +64,10 @@ export function createApp(options: AppOptions = {}) {
       providerSelection: options.modelProvider ?? process.env.MODEL_PROVIDER,
       modelTraceProvider: options.modelTraceProvider
     }));
+  });
+
+  app.get('/api/model-status', (_request, response) => {
+    response.json({ status: getModelRuntimeStatus() });
   });
 
   app.post('/api/refine', async (request, response) => {

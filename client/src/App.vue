@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { PUBLIC_EXPLANATION } from './content/publicCopy';
-import { fetchPrompts, requestRefinementStream } from './services/api';
+import { fetchModelStatus, fetchPrompts, requestRefinementStream } from './services/api';
 import { getNextAutoplaySelection, type AutoplaySelection } from './services/autoplay';
 import { buildHighlightedSegments } from './services/stageDiff';
 import { buildStageDisplay, formatStageText } from './services/stageLabels';
+import { buildTokenCells } from './services/tokenGrid';
 import type {
   Creativity,
   Length,
   OutputType,
   PromptCard,
   RefineRequest,
+  ModelRuntimeStatus,
   Trace
 } from '../../shared/types';
 
@@ -47,11 +49,18 @@ const isRunning = ref(false);
 const reducedMotion = ref(false);
 const autoplayEnabled = ref(false);
 const modelAssisted = ref(false);
+const modelStatus = ref<ModelRuntimeStatus>({
+  state: 'fallback',
+  message: 'Checking model status...',
+  updatedAt: new Date().toISOString(),
+  preloadEnabled: false
+});
 const showDebugLabels = ref(false);
 const lastAutoplaySelection = ref<AutoplaySelection | null>(null);
-const viewMode = ref<'steps' | 'frames'>('steps');
+const viewMode = ref<'steps' | 'frames' | 'grid'>('steps');
 let timer: number | undefined;
 let autoplayTimer: number | undefined;
+let modelStatusTimer: number | undefined;
 let streamAbortController: AbortController | undefined;
 
 const filteredPrompts = computed(() =>
@@ -113,6 +122,12 @@ const highlightedSegments = computed(() =>
     : []
 );
 
+const tokenCells = computed(() =>
+  currentStage.value
+    ? buildTokenCells(formatStageText(currentStage.value.text, showDebugLabels.value), previousStageText.value)
+    : []
+);
+
 const currentStageDisplay = computed(() =>
   currentStage.value
     ? buildStageDisplay(
@@ -124,9 +139,30 @@ const currentStageDisplay = computed(() =>
     : null
 );
 
+const modelStatusLabel = computed(() => {
+  const labels = {
+    fallback: 'Fallback',
+    loading: 'Loading',
+    ready: 'Ready',
+    error: 'Needs attention'
+  };
+  return labels[modelStatus.value.state];
+});
+
 onMounted(async () => {
   prompts.value = await fetchPrompts();
+  await refreshModelStatus();
+  modelStatusTimer = window.setInterval(() => {
+    void refreshModelStatus();
+  }, 2500);
   syncSelectedPrompt();
+});
+
+onUnmounted(() => {
+  if (modelStatusTimer) {
+    window.clearInterval(modelStatusTimer);
+    modelStatusTimer = undefined;
+  }
 });
 
 watch(outputType, () => {
@@ -174,7 +210,7 @@ async function runDemo(nextMode = 'scripted') {
     constraint: constraint.value,
     steps: steps.value,
     streamDelayMs: reducedMotion.value ? Math.min(speed.value, 500) : speed.value,
-    includeEveryFrame: viewMode.value === 'frames',
+    includeEveryFrame: viewMode.value === 'frames' || viewMode.value === 'grid',
     mode: usingCustomPrompt.value || modelAssisted.value ? 'model-assisted' : 'scripted'
   };
   if (usingCustomPrompt.value && customPromptValid.value) {
@@ -297,6 +333,10 @@ function clearAutoplayTimer() {
     window.clearTimeout(autoplayTimer);
     autoplayTimer = undefined;
   }
+}
+
+async function refreshModelStatus() {
+  modelStatus.value = await fetchModelStatus();
 }
 
 function setPromptSource(source: 'cards' | 'custom') {
@@ -479,6 +519,11 @@ function createStreamingTrace(request: RefineRequest): Trace {
 
       <section class="staff-controls" aria-label="Staff controls">
         <span class="label">Staff controls</span>
+        <div class="model-status" :class="`state-${modelStatus.state}`" aria-live="polite">
+          <span>Model: {{ modelStatusLabel }}</span>
+          <strong>{{ modelStatus.providerId ?? 'local fallback' }}</strong>
+          <small>{{ modelStatus.message }}</small>
+        </div>
         <div class="button-row">
           <button type="button" @click="runDemo('replay')">Replay</button>
           <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
@@ -489,6 +534,9 @@ function createStreamingTrace(request: RefineRequest): Trace {
           </button>
           <button type="button" :class="{ selected: viewMode === 'frames' }" @click="viewMode = 'frames'">
             Every frame
+          </button>
+          <button type="button" :class="{ selected: viewMode === 'grid' }" @click="viewMode = 'grid'">
+            Token grid
           </button>
           <button type="button" @click="resetDemo">Reset</button>
         </div>
@@ -514,7 +562,7 @@ function createStreamingTrace(request: RefineRequest): Trace {
 
     <section
       class="stage-view"
-      :class="{ 'frame-view': viewMode === 'frames' }"
+      :class="{ 'frame-view': viewMode === 'frames' || viewMode === 'grid' }"
       aria-label="Current staged refinement"
     >
       <aside v-if="viewMode === 'steps'" class="stage-list">
@@ -534,8 +582,8 @@ function createStreamingTrace(request: RefineRequest): Trace {
         </ol>
       </aside>
 
-      <article class="page-output" :class="{ code: outputType === 'python' }">
-        <div v-if="viewMode === 'frames'" class="frame-slider">
+      <article class="page-output" :class="{ code: outputType === 'python', 'token-grid-view': viewMode === 'grid' }">
+        <div v-if="viewMode === 'frames' || viewMode === 'grid'" class="frame-slider">
           <label>
             <span class="range-label">
               Frame
@@ -563,7 +611,17 @@ function createStreamingTrace(request: RefineRequest): Trace {
               Raw frame: {{ currentStage.label }} · {{ currentStageDisplay.debugText }}
             </small>
           </div>
-          <pre v-if="outputType === 'python'"><template
+          <div v-if="viewMode === 'grid'" class="token-grid" aria-label="Token grid for current frame">
+            <span
+              v-for="(cell, index) in tokenCells"
+              :key="`${cell.text}-${index}`"
+              class="token-cell"
+              :class="`token-${cell.kind}`"
+            >
+              {{ cell.text }}
+            </span>
+          </div>
+          <pre v-else-if="outputType === 'python'"><template
             v-for="(segment, index) in highlightedSegments"
             :key="`${segment.text}-${index}`"
           ><mark v-if="segment.changed" class="changed-word">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></pre>

@@ -1,6 +1,7 @@
 import './registerEnv';
 import { createApp } from './app';
 import { getModelProviderDiagnostics, preloadLocalModel } from './services/modelAdapter';
+import { setModelRuntimeStatus } from './services/modelRuntimeStatus';
 import { formatModelStatusLines } from './services/modelStatusConsole';
 
 const host = process.env.BACKEND_HOST ?? '127.0.0.1';
@@ -14,11 +15,21 @@ createApp().listen(port, host, () => {
 async function bootModelStatus(): Promise<void> {
   await logModelStatus();
   if (!envFlag('MODEL_PRELOAD', false)) {
+    setModelRuntimeStatus({
+      state: 'fallback',
+      preloadEnabled: false,
+      message: 'Model preload is disabled; scripted fallback remains available.'
+    });
     console.log('[model] preload: disabled; set MODEL_PRELOAD=1 to load the local model at startup');
     return;
   }
 
   const timeoutMs = envNumber('MODEL_PRELOAD_TIMEOUT_MS', envNumber('MODEL_WORKER_TIMEOUT_MS', 600000));
+  setModelRuntimeStatus({
+    state: 'loading',
+    preloadEnabled: true,
+    message: 'Local model preload is running.'
+  });
   console.log(`[model] preload: starting local model preload with ${timeoutMs}ms timeout`);
   const startedAt = Date.now();
   const result = await preloadLocalModel({
@@ -27,9 +38,21 @@ async function bootModelStatus(): Promise<void> {
   });
   const elapsedSeconds = ((Date.now() - startedAt) / 1000).toFixed(1);
   if (result.ok) {
+    setModelRuntimeStatus({
+      state: 'ready',
+      providerId: result.providerId,
+      preloadEnabled: true,
+      message: `Local model is preloaded and ready after ${elapsedSeconds}s.`
+    });
     console.log(`[model] preload: ${result.providerId} ready after ${elapsedSeconds}s`);
     return;
   }
+  setModelRuntimeStatus({
+    state: 'error',
+    providerId: result.providerId,
+    preloadEnabled: true,
+    message: result.reason ?? 'Local model preload failed.'
+  });
   console.warn(`[model] preload: ${result.providerId} not ready after ${elapsedSeconds}s - ${result.reason}`);
 }
 

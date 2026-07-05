@@ -1,6 +1,7 @@
 export type Creativity = 'safer' | 'balanced' | 'surprising';
 export type Length = 'short' | 'medium' | 'detailed';
 export type DemoMode = 'scripted' | 'replay' | 'template' | 'model-assisted' | 'model-fallback';
+export type ModelRuntimeState = 'fallback' | 'loading' | 'ready' | 'error';
 export type OutputType = 'story' | 'python';
 
 export interface TraceControls {
@@ -45,4 +46,12 @@ export interface RefineRequest {
   includeEveryFrame?: boolean;
   mode?: 'scripted' | 'model-assisted';
   customPrompt?: string;
+}
+
+export interface ModelRuntimeStatus {
+  state: ModelRuntimeState;
+  providerId?: string;
+  message: string;
+  updatedAt: string;
+  preloadEnabled: boolean;
 }
