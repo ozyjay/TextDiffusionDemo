@@ -1,6 +1,6 @@
 export interface TokenCell {
   text: string;
-  kind: 'mask' | 'changed' | 'stable';
+  kind: 'mask' | 'changed' | 'punctuation' | 'stable';
 }
 
 export function buildTokenCells(currentText: string, previousText = ''): TokenCell[] {
@@ -10,6 +10,9 @@ export function buildTokenCells(currentText: string, previousText = ''): TokenCe
   return currentTokens.map((text, index) => {
     if (isMaskToken(text)) {
       return { text, kind: 'mask' };
+    }
+    if (isPunctuationToken(text)) {
+      return { text, kind: 'punctuation' };
     }
     if (previousTokens[index] !== undefined && previousTokens[index] !== text) {
       return { text, kind: 'changed' };
@@ -27,4 +30,8 @@ function tokenizeForGrid(text: string): string[] {
 
 function isMaskToken(text: string): boolean {
   return /^(?:\[\s*mask\s*\]|<mask>|\.{3})$/i.test(text);
+}
+
+function isPunctuationToken(text: string): boolean {
+  return /^[^\w\s]+$/u.test(text);
 }

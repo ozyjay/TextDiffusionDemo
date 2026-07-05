@@ -522,6 +522,13 @@ input[type='range'] {
   border-color: #8ee7d8;
 }
 
+.token-punctuation {
+  color: #8fa5ad;
+  background: #14252c;
+  border-color: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+
 .changed-word {
   display: inline;
   padding: 0.02em 0.1em;
