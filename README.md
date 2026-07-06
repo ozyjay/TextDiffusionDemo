@@ -61,9 +61,9 @@ python3 -m venv .venv-diffusiongemma
 .venv-diffusiongemma/bin/python -m pip install -r adapters/diffusiongemma_adapter/requirements-fedora.txt
 ```
 
-The first install command intentionally uses PyTorch's ROCm wheel index and pins the ROCm build versions available from that index. This avoids accidentally installing CPU-only PyTorch on the Framework Desktop.
+The first install command intentionally uses PyTorch's ROCm wheel index and pins the ROCm build versions available from that index. This avoids accidentally installing CPU-only PyTorch on the Framework Desktop. The current Fedora/Linux pin uses PyTorch's `rocm7.2` wheels, which have been smoke-tested on the Framework Desktop's AMD Radeon 8060S / `gfx1151` GPU.
 
-On Fedora systems where the PyTorch ROCm wheel bundles an older HSA runtime than the host ROCm packages, the worker launcher automatically preloads `/usr/lib64/libhsa-runtime64.so.1` for the Linux Transformers runtime when that file exists. This avoids first-allocation crashes in the wheel-bundled `libhsa-runtime64.so`. To use a different HSA runtime path, set `DIFFUSIONGEMMA_HSA_RUNTIME_PRELOAD`; to manage preloads yourself, set `LD_PRELOAD` before starting the app.
+On Fedora systems where the PyTorch ROCm wheel bundles an HSA runtime that does not match the host ROCm packages, the worker launcher automatically preloads `/usr/lib64/libhsa-runtime64.so.1` for the Linux Transformers runtime when that file exists. This avoids first-allocation crashes seen with some ROCm wheel/host combinations and is compatible with the current `rocm7.2` pin. To use a different HSA runtime path, set `DIFFUSIONGEMMA_HSA_RUNTIME_PRELOAD`; to manage preloads yourself, set `LD_PRELOAD` before starting the app.
 
 Set up the local Python runtime on macOS / Apple Silicon:
 
@@ -144,6 +144,16 @@ LD_PRELOAD=/usr/lib64/libhsa-runtime64.so.1 \
   .venv-diffusiongemma/bin/python -c "import torch; x=torch.ones((2,2), device='cuda'); print(torch.__version__, torch.version.hip, x.device)"
 PYTHONPATH=adapters/diffusiongemma_adapter DIFFUSIONGEMMA_ENGINE=transformers \
   .venv-diffusiongemma/bin/python -c "from diffusiongemma_adapter.engine_factory import create_engine; print(type(create_engine()).__name__)"
+```
+
+Run ROCm GPU smokes from a normal host shell, or through an approved unsandboxed command, so `/dev/kfd` and `/dev/dri` are visible. Sandboxed shells can make ROCm appear unavailable even when `rocminfo` and PyTorch work on the host.
+
+Framework Desktop ROCm validation as of the `rocm7.2` pin:
+
+```text
+torch 2.11.0+rocm7.2
+HIP 7.2.26015
+device cuda:0 AMD Radeon 8060S Graphics
 ```
 
 For normal testing, start the app and use the provider diagnostics endpoint:

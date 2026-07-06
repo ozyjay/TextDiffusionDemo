@@ -15,14 +15,16 @@ A real text-diffusion backend is useful for research credibility and future deve
 
 ## Current recommendation
 
-Treat **DiffusionGemma via Unsloth Studio** as the first real-model experiment.
+Treat the built-in **Hugging Face Transformers DiffusionGemma worker** as the first local real-model experiment on the Framework Desktop / Fedora path.
 
 Rationale:
 
 - DiffusionGemma is a current experimental diffusion-style text model and fits the demo's “possible future of GenAI” framing.
-- Unsloth documents a local workflow for running DiffusionGemma through Unsloth Studio.
-- Unsloth Studio can expose local model workflows and may be easier to experiment with than wiring raw research-code repositories into the demo app.
-- This should be tested as an optional backend, not as a dependency for the public booth experience.
+- The repo already wraps the Transformers worker behind the normal `POST /api/refine` model-assisted path.
+- PyTorch `rocm7.2` wheels have passed a real worker smoke on the Framework Desktop's AMD Radeon 8060S / `gfx1151` GPU.
+- The backend still falls back to scripted/template traces when the local model is unavailable, slow, invalid, or used on an unsupported output lane.
+
+Unsloth Studio remains a useful research tool, but it is not the first path to wire into this app.
 
 Source to check before implementation:
 
@@ -122,7 +124,7 @@ These are implementation assumptions to verify with smoke tests, not promises.
 | macOS / Apple Silicon | Useful for local experimentation if the installed runtime supports it | Benchmark before relying on it for public use. |
 | Linux / CUDA | Best target for first serious live-backend benchmark | Prefer this if event hardware has an NVIDIA GPU. |
 | Windows | Supported for the Node/Vue demo and PowerShell launch scripts; live-model support depends on the Python/model runtime | Keep scripted/template fallback available. |
-| ROCm / AMD | Plausible later experiment, but not first target | Do not assume compatibility without a working smoke test. |
+| ROCm / AMD | Useful on validated hardware | Framework Desktop / Radeon 8060S passed PyTorch `rocm7.2` allocation, adapter tests, and a real DiffusionGemma worker smoke. GPU smokes must run with host access to `/dev/kfd` and `/dev/dri`. |
 | CPU only | Useful for scripted/template modes; real diffusion backend may be too slow | Must remain a valid fallback environment. |
 
 ---
@@ -152,9 +154,9 @@ A backend is considered usable only if all of these pass on the target machine:
 3. Add a backend adapter interface.
 4. Add a mock backend that intentionally fails and confirms fallback behaviour.
 5. Add an Unsloth/DiffusionGemma adapter behind a feature flag.
-6. Benchmark on CUDA first if available.
+6. Benchmark the validated ROCm path on event hardware if the Framework Desktop is the target machine.
 7. Test macOS next if useful.
-8. Test ROCm only after the above paths are understood.
+8. Benchmark CUDA/NVIDIA only if event hardware changes.
 
 Suggested feature flag:
 
@@ -172,7 +174,8 @@ DIFFUSIONGEMMA_ENGINE=auto
 ```
 
 - `hf-diffusiongemma` uses Hugging Face Transformers and is the preferred Fedora/Linux experiment path.
-- On Fedora/Linux with AMD graphics, install PyTorch from `requirements-fedora-rocm.txt` before the generic Hugging Face packages so the adapter gets ROCm-enabled Torch rather than CPU-only Torch.
+- On Fedora/Linux with AMD graphics, install PyTorch from `requirements-fedora-rocm.txt` before the generic Hugging Face packages so the adapter gets ROCm-enabled Torch rather than CPU-only Torch. The current file pins PyTorch `rocm7.2`.
+- Run ROCm GPU allocation and worker smokes from a normal host shell or an approved unsandboxed command. Sandboxed shells may not expose `/dev/kfd` or `/dev/dri`, which makes PyTorch report no available HIP GPU even when the host works.
 - `mlx-diffusiongemma` uses MLX and is the preferred macOS / Apple Silicon experiment path.
 - `auto` keeps the external adapter first, then prefers the platform-appropriate local worker, then falls back.
 

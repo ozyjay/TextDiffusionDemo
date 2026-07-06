@@ -47,6 +47,17 @@ The demo must be reliable enough for a public Open Day booth. It should fail saf
 | Browser refresh | App returns to clean start state. |
 | Port conflict | Launch script stops and prints a clear error. |
 
+## Model-assisted backend tests
+
+These are staff/development checks only. The public demo must still pass without them.
+
+| Test | Expected result |
+|---|---|
+| ROCm GPU allocation | From a normal host shell or approved unsandboxed command, PyTorch allocates a small tensor on `cuda:0`. |
+| ROCm sandbox guard | If a sandboxed shell cannot see `/dev/kfd` or `/dev/dri`, do not treat `torch.cuda.is_available() == False` as a host failure. |
+| DiffusionGemma worker smoke | The Transformers worker loads `google/diffusiongemma-26B-A4B-it` and returns a valid trace for a curated story prompt. |
+| Model fallback | If the worker times out or returns invalid output, the app returns the seed trace as `model-fallback`. |
+
 ## Manual booth test
 
 Ask someone who did not build the demo to use it.
