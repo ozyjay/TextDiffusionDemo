@@ -2,13 +2,29 @@ import { describe, expect, it } from 'vitest';
 import { buildStageDisplay, formatStageLabel, formatStageText } from '../../client/src/services/stageLabels';
 
 describe('stage labels', () => {
-  it('hides model denoising counts for public display', () => {
-    expect(formatStageLabel({ label: 'Mask 0/32', text: 'x', note: 'x' }, 0, false)).toBe('Noise');
+  it('aligns model frame labels with the public diffusion steps', () => {
+    expect(formatStageLabel({ label: 'Mask 0/32', text: 'x', note: 'x' }, 0, false)).toBe('Canvas');
     expect(formatStageLabel({ label: 'Denoise 1/32', text: 'x', note: 'x' }, 1, false)).toBe(
-      'Early draft'
+      'Iterative refinement'
     );
     expect(formatStageLabel({ label: 'Denoise 4/32', text: 'x', note: 'x' }, 2, false)).toBe(
-      'Clearer draft'
+      'Iterative refinement'
+    );
+  });
+
+  it('maps scripted trace stages onto the same public diffusion steps', () => {
+    expect(formatStageLabel({ label: 'Noise', text: 'x', note: 'x' }, 0, false)).toBe('Canvas');
+    expect(formatStageLabel({ label: 'Rough', text: 'x', note: 'x' }, 1, false)).toBe(
+      'Iterative refinement'
+    );
+    expect(formatStageLabel({ label: 'Clear', text: 'x', note: 'x' }, 2, false)).toBe(
+      'Iterative refinement'
+    );
+    expect(formatStageLabel({ label: 'Styled', text: 'x', note: 'x' }, 3, false)).toBe(
+      'Iterative refinement'
+    );
+    expect(formatStageLabel({ label: 'Final', text: 'x', note: 'x' }, 4, false)).toBe(
+      'Final polish'
     );
   });
 
@@ -22,8 +38,8 @@ describe('stage labels', () => {
     const display = buildStageDisplay({ label: 'Denoise 4/32', text: 'x', note: 'x' }, 2, 4, false);
 
     expect(display.stepText).toBe('Pass 3 of 4');
-    expect(display.label).toBe('Clearer draft');
-    expect(display.detail).toBe('Sampled from internal denoising');
+    expect(display.label).toBe('Iterative refinement');
+    expect(display.detail).toBe('Stable tokens guide the next refinement pass');
     expect(display.debugText).toBe('Internal pass 4 of 32');
   });
 

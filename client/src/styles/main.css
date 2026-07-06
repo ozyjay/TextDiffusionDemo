@@ -144,15 +144,10 @@ h1 {
   padding: 8px 10px;
 }
 
-.lane-switch,
 .prompt-panel,
 .prompt-strip {
   display: grid;
   gap: 8px;
-}
-
-.lane-switch {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .prompt-panel {
@@ -170,7 +165,6 @@ h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.lane-switch button,
 .prompt-card {
   display: grid;
   align-content: start;
@@ -184,13 +178,11 @@ h1 {
   padding: 0.55rem 0.68rem;
 }
 
-.lane-switch button strong,
 .prompt-card strong {
   font-size: 0.96rem;
   line-height: 1.12;
 }
 
-.lane-switch button span,
 .prompt-card span {
   color: #c5d4dc;
   font-size: 0.86rem;
@@ -198,7 +190,6 @@ h1 {
   line-height: 1.2;
 }
 
-.lane-switch button.selected,
 .prompt-source button.selected,
 .prompt-card.selected,
 .button-row button.selected {
@@ -207,9 +198,14 @@ h1 {
   border-color: #f8d66d;
 }
 
-.lane-switch button.selected span,
 .prompt-card.selected span {
   color: #183037;
+}
+
+.fallback-label {
+  color: #d8e7ef;
+  font-size: 0.84rem;
+  font-weight: 800;
 }
 
 .control-board {
@@ -403,7 +399,8 @@ input[type='range'] {
   display: grid;
   align-content: center;
   gap: 16px;
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: #f4f0e6;
   color: #17242a;
 }
@@ -445,9 +442,8 @@ input[type='range'] {
 
 .page-output p,
 .page-output pre {
-  max-height: 100%;
   margin: 0;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .page-output p {
@@ -464,6 +460,24 @@ input[type='range'] {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: clamp(0.98rem, 1.45vw, 1.56rem);
   line-height: 1.34;
+}
+
+.page-output.code {
+  align-content: start;
+}
+
+.page-output.code pre {
+  width: 100%;
+  max-width: none;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 4;
+  padding-bottom: 8px;
+}
+
+.page-output.code .changed-word {
+  padding: 0;
+  border-radius: 3px;
 }
 
 .token-grid-view {
@@ -596,6 +610,35 @@ input[type='range'] {
   font-size: 0.82rem;
   font-weight: 650;
   line-height: 1.2;
+}
+
+.model-progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.model-progress i {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  border-radius: inherit;
+  background: #8ee7d8;
+  transition: width 220ms ease;
+}
+
+.model-status.state-loading .model-progress i {
+  background: #f8d66d;
+}
+
+.model-status.state-error .model-progress i {
+  background: #ff9a8b;
+}
+
+.model-status .progress-copy {
+  color: #f7fbff;
 }
 
 .model-status.state-ready {

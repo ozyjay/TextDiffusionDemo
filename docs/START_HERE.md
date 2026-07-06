@@ -6,7 +6,7 @@ Text Diffusion Lab is an Open Day demo about a possible next direction in genera
 
 The public story is:
 
-> Today’s chatbot-style models often generate text one token at a time. Text diffusion explores another idea: start with rough, noisy, or incomplete text and repeatedly refine it.
+> Today’s chatbot-style models often generate text one token at a time. Text diffusion explores another idea: start with placeholder tokens on a text canvas, refine the whole block over repeated passes, and finish with a final polish.
 
 This repository should first build a **reliable staged refinement demo**, not a research-grade diffusion language model.
 
@@ -16,7 +16,7 @@ Build **Phase A + Phase B** first.
 
 | Phase | Name | Goal |
 |---|---|---|
-| A | From noise to meaning | Show text changing from noisy fragments into a polished sentence. |
+| A | From canvas to polish | Show placeholder tokens changing through refinement passes into a polished sentence. |
 | B | Visitor-controlled refinement | Let visitors steer style, creativity, length, constraints, and speed. |
 | C | Compare generation styles | Later: compare left-to-right generation with staged refinement. |
 

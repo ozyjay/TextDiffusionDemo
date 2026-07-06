@@ -46,7 +46,11 @@ describe('Express API', () => {
 
     expect(response.body.status).toMatchObject({
       state: 'fallback',
-      preloadEnabled: false
+      preloadEnabled: false,
+      progress: {
+        percent: 0,
+        label: expect.any(String)
+      }
     });
     expect(response.body.status.message).toEqual(expect.any(String));
     expect(response.body.status.updatedAt).toEqual(expect.any(String));

@@ -67,6 +67,8 @@ describe('public copy', () => {
 
     expect(appSource).toContain('Model-assisted');
     expect(appSource).toContain('modelAssisted');
+    expect(appSource).toContain('model-progress');
+    expect(appSource).toContain('Model preload progress');
   });
 
   it('exposes draft step and every-frame inspection controls', () => {
@@ -85,8 +87,13 @@ describe('public copy', () => {
 
     expect(appSource).toContain('Prompt source');
     expect(appSource).toContain('Custom prompt');
+    expect(appSource).toContain('Fallback prompts');
+    expect(appSource).toContain('Staff-supervised custom prompt');
+    expect(appSource).toContain('v-if="promptSource === \'fallback\'"');
     expect(appSource).toContain('prompt-panel');
     expect(appSource).toContain('customPrompt');
+    expect(appSource).not.toContain('Short story');
+    expect(appSource).not.toContain('Python script');
   });
 
   it('keeps the response stage in a full-height desktop side panel', () => {
@@ -105,5 +112,24 @@ describe('public copy', () => {
     expect(styles).toContain('.control-column');
     expect(styles).toContain('overflow-y: auto');
     expect(styles).toContain('overscroll-behavior: contain');
+  });
+
+  it('lets long response output scroll inside the stage panel', () => {
+    const styles = readFileSync(resolve(process.cwd(), 'client/src/styles/main.css'), 'utf8');
+
+    expect(styles).toContain('.page-output');
+    expect(styles).toContain('overflow-y: auto');
+    expect(styles).toContain('overscroll-behavior: contain');
+  });
+
+  it('preserves Python response formatting inside code prompts', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
+    const styles = readFileSync(resolve(process.cwd(), 'client/src/styles/main.css'), 'utf8');
+
+    expect(appSource).toContain("code: displayedOutputType === 'python'");
+    expect(styles).toContain('.page-output.code pre');
+    expect(styles).toContain('white-space: pre');
+    expect(styles).toContain('overflow-x: auto');
+    expect(styles).toContain('tab-size: 4');
   });
 });

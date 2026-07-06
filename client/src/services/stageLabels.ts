@@ -24,19 +24,18 @@ export function buildStageDisplay(
   const raw = parseModelStageLabel(stage.label);
   const stepText = `Pass ${index + 1} of ${Math.max(totalStages, index + 1)}`;
   if (!raw) {
+    const publicStage = publicStageDisplay(stage.label);
     return {
       stepText,
-      label: stage.label,
-      detail: stage.label === 'Final' ? 'Completed output' : 'Visible refinement pass',
+      label: publicStage.label,
+      detail: publicStage.detail,
       debugText: null
     };
   }
 
   const publicLabel = raw.kind === 'mask'
-    ? 'Noise'
-    : index <= 1
-      ? 'Early draft'
-      : 'Clearer draft';
+    ? 'Canvas'
+    : 'Iterative refinement';
   const debugText = `Internal pass ${raw.current} of ${raw.total}`;
 
   return {
@@ -71,5 +70,42 @@ function parseModelStageLabel(label: string): { kind: 'mask' | 'denoise'; curren
 }
 
 function modelPublicDetail(kind: 'mask' | 'denoise'): string {
-  return kind === 'mask' ? 'Masked starting point' : 'Sampled from internal denoising';
+  return kind === 'mask'
+    ? 'Placeholder tokens start the text canvas'
+    : 'Stable tokens guide the next refinement pass';
+}
+
+function publicStageDisplay(label: string): Pick<StageDisplay, 'label' | 'detail'> {
+  switch (label) {
+    case 'Noise':
+      return {
+        label: 'Canvas',
+        detail: 'Placeholder tokens start the text canvas'
+      };
+    case 'Rough':
+      return {
+        label: 'Iterative refinement',
+        detail: 'A first pass fills in rough meaning'
+      };
+    case 'Clear':
+      return {
+        label: 'Iterative refinement',
+        detail: 'The whole block becomes clearer'
+      };
+    case 'Styled':
+      return {
+        label: 'Iterative refinement',
+        detail: 'Stable words act as context for the rest'
+      };
+    case 'Final':
+      return {
+        label: 'Final polish',
+        detail: 'The text converges into the final output'
+      };
+    default:
+      return {
+        label,
+        detail: 'Visible refinement pass'
+      };
+  }
 }

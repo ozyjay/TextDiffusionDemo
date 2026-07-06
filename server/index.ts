@@ -28,6 +28,7 @@ async function bootModelStatus(): Promise<void> {
   setModelRuntimeStatus({
     state: 'loading',
     preloadEnabled: true,
+    loadingTimeoutMs: timeoutMs,
     message: 'Local model preload is running.'
   });
   console.log(`[model] preload: starting local model preload with ${timeoutMs}ms timeout`);

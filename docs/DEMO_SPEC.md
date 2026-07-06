@@ -18,12 +18,11 @@ A visitor chooses a prompt card, chooses a style, adjusts one or two controls, a
 
 The screen then shows:
 
-1. noisy fragments;
-2. rough draft;
-3. clearer draft;
-4. styled draft;
-5. polished final;
-6. short explanation of what changed.
+1. a text canvas with placeholder tokens;
+2. repeated iterative refinement passes;
+3. stable words acting as context for the rest;
+4. a final polish;
+5. short explanation of what changed.
 
 ## Example run
 
@@ -31,15 +30,15 @@ Prompt:
 
 > A robot joins university orientation.
 
-Stages:
+Public steps:
 
 | Stage | Text |
 |---|---|
-| Noise | `robot / campus / lost / ??? / map / toaster` |
-| Rough | `A robot was lost at university and needed a map.` |
-| Clear | `A robot got lost during orientation and asked students for help.` |
-| Styled | `A robot joined orientation, downloaded the campus map, and still followed a duck to the wrong lecture.` |
-| Final | `On its first day at university, a curious robot followed a duck across campus and accidentally found the best lecture.` |
+| Canvas | `robot / campus / lost / ??? / map / toaster` |
+| Iterative refinement | `A robot was lost at university and needed a map.` |
+| Iterative refinement | `A robot got lost during orientation and asked students for help.` |
+| Iterative refinement | `A robot joined orientation, downloaded the campus map, and still followed a duck to the wrong lecture.` |
+| Final polish | `On its first day at university, a curious robot followed a duck across campus and accidentally found the best lecture.` |
 
 ## Controls
 
@@ -73,12 +72,12 @@ Recommended layout:
 | Prompt card      | Style       | Creativity | Steps          |
 | Robot orientation| Funny       | Balanced   | 6              |
 +-------------------------------------------------------------+
-| Stage timeline                                               |
-| 0 Noise      robot / campus / lost / ??? / map               |
-| 1 Rough      A robot was lost at university...               |
-| 2 Clear      A robot got lost during orientation...          |
-| 3 Styled     A robot joined orientation...                   |
-| 4 Final      On its first day at university...               |
+| Step timeline                                                |
+| 0 Canvas                 robot / campus / lost / ??? / map   |
+| 1 Iterative refinement   A robot was lost at university...   |
+| 2 Iterative refinement   A robot got lost during orientation |
+| 3 Iterative refinement   A robot joined orientation...       |
+| 4 Final polish           On its first day at university...   |
 +-------------------------------------------------------------+
 | What this shows: text can improve through repeated           |
 | refinement, not only by adding one word at a time.           |
@@ -87,7 +86,7 @@ Recommended layout:
 
 ## Staff script
 
-> “Most chatbots generate text one piece at a time. This demo shows a different research direction: start with rough or noisy text, then refine the whole answer over several passes. It is simplified, but it shows why future GenAI might become more controllable and editable.”
+> “Most chatbots generate text one piece at a time. This simplified demo shows a different research direction: start with placeholder tokens on a text canvas, make repeated refinement passes that use stable words as context, then finish with a final polish.”
 
 ## Readiness gates
 

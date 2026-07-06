@@ -8,11 +8,10 @@ The public demo is intentionally modest. It is a **simplified, diffusion-inspire
 
 Visitors choose a prompt card, press **Diffuse Text**, and watch a whole piece of text change over several passes:
 
-1. noisy fragments;
-2. a rough draft;
-3. a clearer draft;
-4. a styled draft;
-5. a final answer.
+1. a placeholder-token canvas;
+2. iterative refinement passes;
+3. stable words acting as context for the rest;
+4. a final polish.
 
 In staff-only **Model-assisted** mode, the backend can run `google/diffusiongemma-26B-A4B-it` locally and show real `Mask` / `Denoise` draft frames before the final model output when the local runtime supports it.
 
@@ -101,7 +100,7 @@ macOS/Linux: .venv-diffusiongemma/bin/python -m diffusiongemma_adapter.worker
 Windows:     .venv-diffusiongemma\Scripts\python.exe -m diffusiongemma_adapter.worker
 ```
 
-The API begins listening immediately, then logs `[model] preload: ... ready` when the local worker has loaded the model. Later requests reuse the warm worker. If the worker is unavailable, slow, invalid, or used on an unsupported lane, the app returns the safe fallback as `model-fallback`.
+The API begins listening immediately, then logs `[model] preload: ... ready` when the local worker has loaded the model. Later requests reuse the warm worker. If the worker is unavailable, slow, invalid, or used for an unsupported output type, the app returns the safe fallback as `model-fallback`.
 
 Useful environment overrides:
 
@@ -179,14 +178,14 @@ macOS / MLX one-off model smoke test:
 
 ## Staff Controls
 
-The main screen exposes curated prompt cards, a staff-supervised custom prompt, and simple style/creativity/length/constraint controls. Staff controls add:
+The main screen puts the staff-supervised custom prompt first, then offers curated story and coding examples together as secondary fallback prompts. Simple style/creativity/length/constraint controls remain available. Staff controls add:
 
 - replay and looping autoplay;
 - step and every-frame inspection modes;
 - optional **Model-assisted** mode;
 - reduced motion and reset controls.
 
-Custom prompts are story-only in v1. They are not stored, and they still fall back to the selected curated card scaffold if the live model cannot respond.
+Custom prompts are story-only in v1. They are not stored, and they still fall back to the selected fallback prompt scaffold if the live model cannot respond.
 
 ## Scripts
 
@@ -264,6 +263,6 @@ Avoid claiming:
 
 ## Current Build Priorities
 
-1. **Phase A: From noise to meaning** - strong staged refinement loop.
+1. **Phase A: From canvas to polish** - strong staged refinement loop.
 2. **Phase B: Visitor-controlled refinement** - prompt cards, controls, and staff-supervised options.
 3. **Phase C: Compare with today’s LLMs** - optional split-screen teaching layer.

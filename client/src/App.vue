@@ -16,11 +16,6 @@ import type {
   Trace
 } from '../../shared/types';
 
-const outputTypes: Array<{ id: OutputType; label: string; hint: string }> = [
-  { id: 'story', label: 'Short story', hint: 'A page-sized story that becomes clearer each pass.' },
-  { id: 'python', label: 'Python script', hint: 'A small readable script that fills in from missing pieces.' }
-];
-
 const styles = ['clear', 'funny', 'sci-fi', 'campus', 'scientific', 'poetic'];
 const constraints = [
   { id: 'none', label: 'No constraint' },
@@ -34,7 +29,7 @@ const constraints = [
 const prompts = ref<PromptCard[]>([]);
 const outputType = ref<OutputType>('story');
 const selectedPromptId = ref('robot-orientation-story');
-const promptSource = ref<'cards' | 'custom'>('cards');
+const promptSource = ref<'custom' | 'fallback'>('custom');
 const customPrompt = ref('');
 const selectedStyle = ref('clear');
 const creativity = ref<Creativity>('balanced');
@@ -63,9 +58,7 @@ let autoplayTimer: number | undefined;
 let modelStatusTimer: number | undefined;
 let streamAbortController: AbortController | undefined;
 
-const filteredPrompts = computed(() =>
-  prompts.value.filter((prompt) => prompt.outputType === outputType.value)
-);
+const fallbackPrompts = computed(() => prompts.value);
 
 const currentStage = computed(() =>
   activeTrace.value && activeIndex.value >= 0 ? activeTrace.value.stages[activeIndex.value] : null
@@ -74,19 +67,27 @@ const currentStage = computed(() =>
 const frameCount = computed(() => activeTrace.value?.stages.length ?? 0);
 
 const selectedPrompt = computed(() =>
-  filteredPrompts.value.find((prompt) => prompt.id === selectedPromptId.value)
+  fallbackPrompts.value.find((prompt) => prompt.id === selectedPromptId.value)
+);
+
+const defaultStoryFallback = computed(() =>
+  fallbackPrompts.value.find((prompt) => prompt.outputType === 'story')
 );
 
 const trimmedCustomPrompt = computed(() => customPrompt.value.trim());
-
-const customPromptAvailable = computed(() => outputType.value === 'story');
 
 const customPromptValid = computed(() =>
   trimmedCustomPrompt.value.length >= 8 && trimmedCustomPrompt.value.length <= 140
 );
 
-const usingCustomPrompt = computed(() =>
-  promptSource.value === 'custom' && customPromptAvailable.value
+const usingCustomPrompt = computed(() => promptSource.value === 'custom');
+
+const requestOutputType = computed<OutputType>(() =>
+  usingCustomPrompt.value ? 'story' : selectedPrompt.value?.outputType ?? outputType.value
+);
+
+const displayedOutputType = computed<OutputType>(() =>
+  activeTrace.value?.outputType ?? requestOutputType.value
 );
 
 const effectivePromptText = computed(() =>
@@ -149,6 +150,26 @@ const modelStatusLabel = computed(() => {
   return labels[modelStatus.value.state];
 });
 
+const modelProgressPercent = computed(() =>
+  Math.max(0, Math.min(100, Math.round(modelStatus.value.progress?.percent ?? 0)))
+);
+
+const modelProgressStyle = computed(() => ({
+  width: `${modelProgressPercent.value}%`
+}));
+
+const modelProgressText = computed(() => {
+  const progress = modelStatus.value.progress;
+  if (!progress) {
+    return 'Progress unavailable';
+  }
+  if (modelStatus.value.state === 'loading') {
+    const elapsed = progress.elapsedSeconds === undefined ? '' : ` - ${progress.elapsedSeconds}s elapsed`;
+    return `${progress.indeterminate ? 'Loading' : `${modelProgressPercent.value}% estimated`}${elapsed}`;
+  }
+  return progress.label;
+});
+
 onMounted(async () => {
   prompts.value = await fetchPrompts();
   await refreshModelStatus();
@@ -165,15 +186,6 @@ onUnmounted(() => {
   }
 });
 
-watch(outputType, () => {
-  if (outputType.value !== 'story') {
-    promptSource.value = 'cards';
-    customPrompt.value = '';
-  }
-  syncSelectedPrompt();
-  clearCurrentRun();
-});
-
 watch(autoplayEnabled, (enabled) => {
   clearAutoplayTimer();
   if (enabled) {
@@ -182,14 +194,15 @@ watch(autoplayEnabled, (enabled) => {
 });
 
 function syncSelectedPrompt() {
-  const firstPrompt = filteredPrompts.value[0];
+  const firstPrompt = fallbackPrompts.value[0];
   if (!firstPrompt) {
     return;
   }
-  if (!filteredPrompts.value.some((prompt) => prompt.id === selectedPromptId.value)) {
+  if (!fallbackPrompts.value.some((prompt) => prompt.id === selectedPromptId.value)) {
     selectedPromptId.value = firstPrompt.id;
   }
-  constraint.value = outputType.value === 'story' ? 'include-reef' : 'none';
+  outputType.value = selectedPrompt.value?.outputType ?? firstPrompt.outputType;
+  syncConstraint();
 }
 
 async function runDemo(nextMode = 'scripted') {
@@ -202,7 +215,7 @@ async function runDemo(nextMode = 'scripted') {
   clearAutoplayTimer();
   isRunning.value = true;
   const request: RefineRequest = {
-    outputType: outputType.value,
+    outputType: requestOutputType.value,
     promptId: selectedPromptId.value,
     style: selectedStyle.value,
     creativity: creativity.value,
@@ -264,6 +277,7 @@ async function runAutoplayDemo() {
   lastAutoplaySelection.value = selection;
   outputType.value = selection.outputType;
   selectedPromptId.value = selection.promptId;
+  promptSource.value = 'fallback';
   await runDemo('autoplay');
 }
 
@@ -292,6 +306,7 @@ function resetDemo() {
   clearAutoplayTimer();
   autoplayEnabled.value = false;
   customPrompt.value = '';
+  promptSource.value = 'custom';
 }
 
 function clearCurrentRun() {
@@ -339,19 +354,28 @@ async function refreshModelStatus() {
   modelStatus.value = await fetchModelStatus();
 }
 
-function setPromptSource(source: 'cards' | 'custom') {
-  if (source === 'custom' && !customPromptAvailable.value) {
-    return;
-  }
+function setPromptSource(source: 'custom' | 'fallback') {
   promptSource.value = source;
   if (source === 'custom') {
     modelAssisted.value = true;
+    if (selectedPrompt.value?.outputType !== 'story' && defaultStoryFallback.value) {
+      selectedPromptId.value = defaultStoryFallback.value.id;
+      outputType.value = defaultStoryFallback.value.outputType;
+    }
   }
+  syncConstraint();
 }
 
 function selectPrompt(promptId: string) {
   selectedPromptId.value = promptId;
-  promptSource.value = 'cards';
+  outputType.value = selectedPrompt.value?.outputType ?? outputType.value;
+  promptSource.value = 'fallback';
+  syncConstraint();
+  clearCurrentRun();
+}
+
+function syncConstraint() {
+  constraint.value = requestOutputType.value === 'story' ? 'include-reef' : 'none';
 }
 
 function selectStage(index: number) {
@@ -393,7 +417,7 @@ function createStreamingTrace(request: RefineRequest): Trace {
         <div>
           <p class="eyebrow">Open Day AI Demo</p>
           <h1>Beyond Next-Word Prediction: Text Diffusion Lab</h1>
-          <p class="subtitle">Watch missing text fill in and become clearer through staged refinement.</p>
+          <p class="subtitle">Watch placeholder tokens become clearer through repeated refinement passes.</p>
         </div>
         <aside class="status-panel" aria-label="Demo status">
           <span class="mode-label">Mode: {{ mode }}</span>
@@ -402,39 +426,25 @@ function createStreamingTrace(request: RefineRequest): Trace {
       </header>
 
       <section class="chooser" aria-label="Visitor choices">
-        <div class="lane-switch" role="group" aria-label="Output type">
-          <button
-            v-for="item in outputTypes"
-            :key="item.id"
-            :class="{ selected: outputType === item.id }"
-            type="button"
-            @click="outputType = item.id"
-          >
-            <strong>{{ item.label }}</strong>
-            <span>{{ item.hint }}</span>
-          </button>
-        </div>
-
         <div class="prompt-panel">
           <div class="prompt-source" role="group" aria-label="Prompt source">
             <button
               type="button"
-              :class="{ selected: promptSource === 'cards' }"
-              @click="setPromptSource('cards')"
-            >
-              Prompt cards
-            </button>
-            <button
-              type="button"
               :class="{ selected: promptSource === 'custom' }"
-              :disabled="!customPromptAvailable"
               @click="setPromptSource('custom')"
             >
               Custom prompt
             </button>
+            <button
+              type="button"
+              :class="{ selected: promptSource === 'fallback' }"
+              @click="setPromptSource('fallback')"
+            >
+              Fallback prompts
+            </button>
           </div>
           <label class="custom-prompt-field">
-            Custom prompt
+            Staff-supervised custom prompt
             <input
               v-model="customPrompt"
               maxlength="140"
@@ -445,19 +455,22 @@ function createStreamingTrace(request: RefineRequest): Trace {
             />
             <span>{{ customPromptStatus }}</span>
           </label>
-          <div class="prompt-strip">
-            <button
-              v-for="prompt in filteredPrompts"
-              :key="prompt.id"
-              class="prompt-card"
-              :class="{ selected: promptSource === 'cards' && selectedPromptId === prompt.id }"
-              type="button"
-              @click="selectPrompt(prompt.id)"
-            >
-              <strong>{{ prompt.prompt }}</strong>
-              <span>{{ prompt.notes }}</span>
-            </button>
-          </div>
+          <template v-if="promptSource === 'fallback'">
+            <span class="fallback-label">Fallback prompts</span>
+            <div class="prompt-strip">
+              <button
+                v-for="prompt in fallbackPrompts"
+                :key="prompt.id"
+                class="prompt-card"
+                :class="{ selected: selectedPromptId === prompt.id }"
+                type="button"
+                @click="selectPrompt(prompt.id)"
+              >
+                <strong>{{ prompt.prompt }}</strong>
+                <span>{{ prompt.outputType === 'python' ? 'Coding fallback' : 'Story fallback' }} - {{ prompt.notes }}</span>
+              </button>
+            </div>
+          </template>
         </div>
       </section>
 
@@ -522,6 +535,17 @@ function createStreamingTrace(request: RefineRequest): Trace {
         <div class="model-status" :class="`state-${modelStatus.state}`" aria-live="polite">
           <span>Model: {{ modelStatusLabel }}</span>
           <strong>{{ modelStatus.providerId ?? 'local fallback' }}</strong>
+          <div
+            class="model-progress"
+            role="progressbar"
+            aria-label="Model preload progress"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            :aria-valuenow="modelProgressPercent"
+          >
+            <i :style="modelProgressStyle"></i>
+          </div>
+          <small class="progress-copy">{{ modelProgressText }}</small>
           <small>{{ modelStatus.message }}</small>
         </div>
         <div class="button-row">
@@ -582,7 +606,7 @@ function createStreamingTrace(request: RefineRequest): Trace {
         </ol>
       </aside>
 
-      <article class="page-output" :class="{ code: outputType === 'python', 'token-grid-view': viewMode === 'grid' }">
+      <article class="page-output" :class="{ code: displayedOutputType === 'python', 'token-grid-view': viewMode === 'grid' }">
         <div v-if="viewMode === 'frames' || viewMode === 'grid'" class="frame-slider">
           <label>
             <span class="range-label">
@@ -621,7 +645,7 @@ function createStreamingTrace(request: RefineRequest): Trace {
               {{ cell.text }}
             </span>
           </div>
-          <pre v-else-if="outputType === 'python'"><template
+          <pre v-else-if="displayedOutputType === 'python'"><template
             v-for="(segment, index) in highlightedSegments"
             :key="`${segment.text}-${index}`"
           ><mark v-if="segment.changed" class="changed-word">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></pre>
@@ -632,7 +656,7 @@ function createStreamingTrace(request: RefineRequest): Trace {
         </template>
         <template v-else>
           <p class="idle-copy">{{ PUBLIC_EXPLANATION }}</p>
-          <span class="idle-help">Pick Short story or Python script, choose a card, then press Diffuse Text.</span>
+          <span class="idle-help">Enter a staff-supervised custom prompt, or choose a fallback prompt, then press Diffuse Text.</span>
         </template>
       </article>
     </section>

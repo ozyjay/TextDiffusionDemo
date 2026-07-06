@@ -1,6 +1,6 @@
 # Implementation Phases — Text Diffusion Lab
 
-## Phase A — From noise to meaning
+## Phase A — From canvas to polish
 
 ### Goal
 
@@ -19,6 +19,8 @@ Create the visual refinement loop.
 
 Suggested trace format:
 
+These labels are the internal validation labels. The public UI maps them to the Google-style explanation: `Canvas`, repeated `Iterative refinement` passes, and `Final polish`.
+
 ```json
 {
   "id": "robot-orientation-funny",
@@ -33,17 +35,17 @@ Suggested trace format:
     {
       "label": "Noise",
       "text": "robot / campus / lost / ??? / map / toaster",
-      "note": "Initial noisy concepts"
+      "note": "Placeholder-token canvas"
     },
     {
       "label": "Rough",
       "text": "A robot was lost at university and needed a map.",
-      "note": "Rough meaning appears"
+      "note": "First refinement pass fills in rough meaning"
     },
     {
       "label": "Final",
       "text": "On its first day at university, a curious robot followed a duck across campus and accidentally found the best lecture.",
-      "note": "Final polished sentence"
+      "note": "Final polish"
     }
   ]
 }

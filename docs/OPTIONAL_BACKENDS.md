@@ -89,17 +89,17 @@ The backend adapter should return the same timeline shape used by scripted trace
     {
       "label": "Noise",
       "text": "robot / campus / lost / ??? / map",
-      "note": "Initial noisy or incomplete concepts"
+      "note": "Placeholder-token canvas"
     },
     {
       "label": "Rough",
       "text": "A robot was lost at university and needed a map.",
-      "note": "Rough meaning appears"
+      "note": "First refinement pass fills in rough meaning"
     },
     {
       "label": "Final",
       "text": "On its first day at university, a curious robot followed a duck across campus and accidentally found the best lecture.",
-      "note": "Final polished sentence"
+      "note": "Final polish"
     }
   ],
   "metadata": {

@@ -48,10 +48,19 @@ export interface RefineRequest {
   customPrompt?: string;
 }
 
+export interface ModelLoadProgress {
+  percent: number;
+  label: string;
+  elapsedSeconds?: number;
+  timeoutSeconds?: number;
+  indeterminate?: boolean;
+}
+
 export interface ModelRuntimeStatus {
   state: ModelRuntimeState;
   providerId?: string;
   message: string;
   updatedAt: string;
   preloadEnabled: boolean;
+  progress?: ModelLoadProgress;
 }

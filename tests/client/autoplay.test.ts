@@ -3,7 +3,7 @@ import { getNextAutoplaySelection } from '../../client/src/services/autoplay';
 import { getLocalPrompts } from '../../client/src/services/localTraceStore';
 
 describe('autoplay sequence', () => {
-  it('alternates between story and Python lanes', () => {
+  it('cycles through story and coding fallback prompts', () => {
     const prompts = getLocalPrompts();
     const first = getNextAutoplaySelection(prompts, null);
     const second = getNextAutoplaySelection(prompts, first);
