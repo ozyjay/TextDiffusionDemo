@@ -30,7 +30,7 @@ class TraceMappingTests(unittest.TestCase):
             ],
         }
 
-        trace = build_trace_from_final(seed_trace, "new model final")
+        trace = build_trace_from_final(seed_trace, "new model final", "<bos>final\nnew model final<eos>")
 
         self.assertEqual(trace["id"], "robot-orientation-story-diffusiongemma")
         self.assertEqual([stage["label"] for stage in trace["stages"]], [
@@ -43,6 +43,7 @@ class TraceMappingTests(unittest.TestCase):
         self.assertIn("robot", trace["stages"][0]["text"])
         self.assertEqual(trace["stages"][-1]["label"], "Final")
         self.assertEqual(trace["stages"][-1]["text"], "new model final")
+        self.assertEqual(trace["stages"][-1]["rawText"], "<bos>final\nnew model final<eos>")
         self.assertIn("DiffusionGemma", trace["stages"][-1]["note"])
 
     def test_clean_generated_text_removes_markdown_fences_and_special_tokens(self):
@@ -98,7 +99,12 @@ class TraceMappingTests(unittest.TestCase):
             {"label": "Denoise 4/8", "text": "The robot waved."},
         ]
 
-        trace = build_trace_from_snapshots(seed_trace, snapshots, "The robot waved at orientation.")
+        trace = build_trace_from_snapshots(
+            seed_trace,
+            snapshots,
+            "The robot waved at orientation.",
+            raw_final_text="<|channel>final\nThe robot waved at orientation.<channel|>",
+        )
 
         self.assertEqual([stage["label"] for stage in trace["stages"]], [
             "Mask 0/8",
@@ -107,6 +113,10 @@ class TraceMappingTests(unittest.TestCase):
             "Final",
         ])
         self.assertEqual(trace["stages"][-1]["text"], "The robot waved at orientation.")
+        self.assertEqual(
+            trace["stages"][-1]["rawText"],
+            "<|channel>final\nThe robot waved at orientation.<channel|>",
+        )
 
     def test_build_trace_from_snapshots_can_preserve_every_denoising_frame(self):
         seed_trace = {

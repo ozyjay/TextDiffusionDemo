@@ -80,6 +80,7 @@ def refine_payload(payload: dict[str, Any], engine: DiffusionGemmaEngine) -> tup
             seed_trace,
             result.get("snapshots", []),
             str(result.get("finalText", "")),
+            raw_final_text=result.get("rawFinalText"),
         )
     else:
         trace = build_trace_from_final(seed_trace, str(result))

@@ -51,6 +51,7 @@ const modelStatus = ref<ModelRuntimeStatus>({
   preloadEnabled: false
 });
 const showDebugLabels = ref(false);
+const showRawModelText = ref(false);
 const lastAutoplaySelection = ref<AutoplaySelection | null>(null);
 const viewMode = ref<'steps' | 'frames' | 'grid'>('steps');
 let timer: number | undefined;
@@ -138,6 +139,10 @@ const currentStageDisplay = computed(() =>
         showDebugLabels.value
       )
     : null
+);
+
+const rawModelText = computed(() =>
+  activeTrace.value?.stages.find((stage) => stage.rawText)?.rawText?.trim() ?? ''
 );
 
 const modelStatusLabel = computed(() => {
@@ -576,6 +581,10 @@ function createStreamingTrace(request: RefineRequest): Trace {
           <input v-model="showDebugLabels" type="checkbox" />
           Debug labels
         </label>
+        <label class="checkbox-line">
+          <input v-model="showRawModelText" type="checkbox" />
+          Raw model text
+        </label>
       </section>
 
       <footer class="explanation">
@@ -653,6 +662,10 @@ function createStreamingTrace(request: RefineRequest): Trace {
             v-for="(segment, index) in highlightedSegments"
             :key="`${segment.text}-${index}`"
           ><mark v-if="segment.changed" class="changed-word">{{ segment.text }}</mark><span v-else>{{ segment.text }}</span></template></p>
+          <section v-if="showRawModelText" class="raw-model-output" aria-label="Raw decoded model text">
+            <strong>Raw decoded model text</strong>
+            <pre>{{ rawModelText || 'No raw decoded model text is attached to this trace.' }}</pre>
+          </section>
         </template>
         <template v-else>
           <p class="idle-copy">{{ PUBLIC_EXPLANATION }}</p>

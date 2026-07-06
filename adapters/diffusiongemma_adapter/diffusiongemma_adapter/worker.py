@@ -49,9 +49,14 @@ def handle_line(line: str, engine: DiffusionGemmaEngine) -> dict[str, Any]:
                 result.get("snapshots", []),
                 result.get("finalText", ""),
                 preserve_duplicate_frames=bool(request.get("includeEveryFrame", False)),
+                raw_final_text=result.get("rawFinalText"),
             )
         else:
-            trace = build_trace_from_final(seed_trace, result.get("finalText", ""))
+            trace = build_trace_from_final(
+                seed_trace,
+                result.get("finalText", ""),
+                result.get("rawFinalText"),
+            )
         return {"id": request_id, "ok": True, "trace": trace}
     except Exception as error:
         return {

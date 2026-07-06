@@ -60,7 +60,7 @@ class TransformersEngineTests(unittest.TestCase):
         engine._processor = FakeProcessor()
         engine._torch = SimpleNamespace(no_grad=lambda: _NullContext())
         engine._build_inputs = lambda *_args: {"input_ids": FakeTokenIds("prompt")}
-        engine._decode = lambda *_args: "final reef signal"
+        engine._decode = lambda *_args: "<bos>final reef signal<eos>"
 
         result = engine.refine(
             {
@@ -75,6 +75,7 @@ class TransformersEngineTests(unittest.TestCase):
         )
 
         self.assertEqual(result["finalText"], "final reef signal")
+        self.assertEqual(result["rawFinalText"], "<bos>final reef signal<eos>")
         self.assertEqual(result["snapshots"][0], {"label": "Mask 0/16", "text": "[Mask] reef signal"})
         self.assertIn("max_denoising_steps", model.kwargs)
         self.assertNotIn("block_length", model.kwargs)

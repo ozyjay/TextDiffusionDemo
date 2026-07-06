@@ -59,9 +59,11 @@ class DiffusionGemmaEngine:
                     continue
                 final_parts.append(str(getattr(chunk, "text", "")))
 
+        raw_final_text = "".join(final_parts)
         return {
             "snapshots": snapshots,
-            "finalText": clean_generated_text("".join(final_parts)),
+            "finalText": clean_generated_text(raw_final_text),
+            "rawFinalText": raw_final_text,
         }
 
     def preload(self) -> None:

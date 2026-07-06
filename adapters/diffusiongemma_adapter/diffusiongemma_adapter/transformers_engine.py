@@ -45,10 +45,11 @@ class TransformersDiffusionGemmaEngine:
             except TypeError:
                 outputs = model.generate(**inputs, **generation_kwargs)
 
-        generated = self._decode(processor, outputs, inputs, torch)
+        raw_generated = self._decode(processor, outputs, inputs, torch, False)
         return {
             "snapshots": streamer.snapshots,
-            "finalText": clean_generated_text(generated),
+            "finalText": clean_generated_text(raw_generated),
+            "rawFinalText": raw_generated,
         }
 
     def preload(self) -> None:
@@ -140,7 +141,7 @@ class TransformersDiffusionGemmaEngine:
             inputs = inputs.to(device)
         return inputs
 
-    def _decode(self, processor, outputs, inputs, torch) -> str:
+    def _decode(self, processor, outputs, inputs, torch, skip_special_tokens: bool = True) -> str:
         sequences = outputs.sequences if hasattr(outputs, "sequences") else outputs
         if isinstance(sequences, tuple):
             sequences = sequences[0]
@@ -151,10 +152,10 @@ class TransformersDiffusionGemmaEngine:
 
         with torch.no_grad():
             if hasattr(processor, "batch_decode"):
-                return processor.batch_decode(sequences, skip_special_tokens=True)[0]
+                return processor.batch_decode(sequences, skip_special_tokens=skip_special_tokens)[0]
             tokenizer = getattr(processor, "tokenizer", None)
             if tokenizer and hasattr(tokenizer, "batch_decode"):
-                return tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+                return tokenizer.batch_decode(sequences, skip_special_tokens=skip_special_tokens)[0]
         return str(sequences)
 
 

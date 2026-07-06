@@ -30,6 +30,7 @@ class EngineTests(unittest.TestCase):
         )
 
         self.assertEqual(result["finalText"], "The robot waved at orientation.")
+        self.assertEqual(result["rawFinalText"], "The robot waved at orientation.")
         self.assertEqual(result["snapshots"][0], {"label": "Mask 0/8", "text": "[Mask] [Mask]"})
         self.assertEqual(result["snapshots"][1], {"label": "Denoise 2/8", "text": "The robot [Mask]"})
 

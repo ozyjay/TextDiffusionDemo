@@ -22,6 +22,7 @@ export interface RefinementStage {
   label: string;
   text: string;
   note: string;
+  rawText?: string;
 }
 
 export interface Trace {

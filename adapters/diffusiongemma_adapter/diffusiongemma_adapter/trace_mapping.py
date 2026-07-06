@@ -8,7 +8,11 @@ FINAL_NOTE = "DiffusionGemma generated the final pass after the visible draft fr
 DRAFT_NOTE = "DiffusionGemma draft frame captured during denoising."
 
 
-def build_trace_from_final(seed_trace: dict[str, Any], final_text: str) -> dict[str, Any]:
+def build_trace_from_final(
+    seed_trace: dict[str, Any],
+    final_text: str,
+    raw_final_text: str | None = None,
+) -> dict[str, Any]:
     cleaned_final = clean_generated_text(final_text)
     stages = list(seed_trace.get("stages", []))
     if len(stages) != 5:
@@ -17,10 +21,13 @@ def build_trace_from_final(seed_trace: dict[str, Any], final_text: str) -> dict[
     fallback_final = str(stages[-1].get("text", "")).strip()
     final = cleaned_final or fallback_final or "No model output was generated."
     if cleaned_final:
+        model_stages = synthesize_stages_from_final(seed_trace, final)
+        if raw_final_text is not None:
+            model_stages[-1]["rawText"] = raw_final_text
         return {
             **seed_trace,
             "id": f"{seed_trace['promptId']}-diffusiongemma",
-            "stages": synthesize_stages_from_final(seed_trace, final),
+            "stages": model_stages,
         }
 
     final_stage = {
@@ -29,6 +36,8 @@ def build_trace_from_final(seed_trace: dict[str, Any], final_text: str) -> dict[
         "text": final,
         "note": FINAL_NOTE,
     }
+    if raw_final_text is not None:
+        final_stage["rawText"] = raw_final_text
 
     return {
         **seed_trace,
@@ -43,6 +52,7 @@ def build_trace_from_snapshots(
     final_text: str,
     *,
     preserve_duplicate_frames: bool = False,
+    raw_final_text: str | None = None,
 ) -> dict[str, Any]:
     cleaned_snapshots = clean_snapshots(snapshots, preserve_duplicate_frames=preserve_duplicate_frames)
     cleaned_final = clean_generated_text(final_text)
@@ -69,6 +79,7 @@ def build_trace_from_snapshots(
                 "label": "Final",
                 "text": cleaned_final or fallback_final or "No model output was generated.",
                 "note": FINAL_NOTE,
+                **({"rawText": raw_final_text} if raw_final_text is not None else {}),
             }
         ],
     }
