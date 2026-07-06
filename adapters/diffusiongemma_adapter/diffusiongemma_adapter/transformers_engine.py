@@ -44,6 +44,10 @@ class TransformersDiffusionGemmaEngine:
                 outputs = model.generate(**inputs, **generation_kwargs, **diffusion_kwargs)
             except TypeError:
                 outputs = model.generate(**inputs, **generation_kwargs)
+            except ValueError as error:
+                if "max_denoising_steps" not in str(error):
+                    raise
+                outputs = model.generate(**inputs, **generation_kwargs)
 
         raw_generated = self._decode(processor, outputs, inputs, torch, False)
         return {

@@ -114,6 +114,37 @@ MODEL_PRELOAD=1
 MODEL_PRELOAD_TIMEOUT_MS=600000
 ```
 
+### Red Hat Quant Model via vLLM
+
+The Red Hat quantised Gemma checkpoint is a separate staff experiment from the DiffusionGemma worker. Direct Transformers loading of `RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic` can report missing/unexpected MoE expert weights and produce unusable decoded text. The model card describes it as ready for vLLM, so the app exposes an OpenAI-compatible `redhat-vllm` provider instead.
+
+Start vLLM separately:
+
+```bash
+vllm serve RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.90 \
+  --limit-mm-per-prompt '{"image":0,"audio":0}'
+```
+
+Then start the demo with:
+
+```bash
+MODEL_PROVIDER=redhat-vllm
+REDHAT_VLLM_BASE_URL=http://127.0.0.1:8000/v1
+REDHAT_VLLM_MODEL=RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic
+REDHAT_VLLM_API_KEY=EMPTY
+```
+
+`redhat-vllm` supports story output only. It calls `/v1/chat/completions`, preserves the raw decoded response for the staff raw-output control, and converts the final answer into the public staged-refinement display. Leave it disabled for booth fallback mode unless the vLLM smoke passes on the event machine.
+
+Framework Desktop / Radeon 8060S outcome:
+
+- ROCm 7.2 torch in the vLLM test venv could see `gfx1151` and allocate a CUDA/HIP tensor on the host.
+- vLLM 0.24.0 reached Gemma4 model initialisation for `RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic`.
+- The server failed before listening because the FP8 MoE backend did not support the local ROCm deployment configuration, including retries with `VLLM_ROCM_USE_AITER=1` and `VLLM_ROCM_USE_AITER_MOE=1`.
+- Treat this Red Hat FP8 quant as not runnable on the local Halo / Strix Halo path until a newer vLLM ROCm backend explicitly supports this configuration.
+
 Leave `DIFFUSIONGEMMA_PYTHON` unset to use the project virtualenv default for the current OS. Override it only when the Python executable lives somewhere else:
 
 ```bash
@@ -124,7 +155,7 @@ DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
 $env:DIFFUSIONGEMMA_PYTHON = ".\.venv-diffusiongemma\Scripts\python.exe"
 ```
 
-`MODEL_PROVIDER` can be `auto`, `external-adapter`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend tries a configured external adapter first, then the platform-appropriate local DiffusionGemma worker, then falls back safely. On Fedora/Linux and Windows, `auto` enables the Hugging Face Transformers worker. On macOS, `auto` enables the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
+`MODEL_PROVIDER` can be `auto`, `external-adapter`, `redhat-vllm`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend tries a configured external adapter first, then a configured Red Hat vLLM endpoint, then the platform-appropriate local DiffusionGemma worker, then falls back safely. On Fedora/Linux and Windows, `auto` enables the Hugging Face Transformers worker. On macOS, `auto` enables the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
 
 `DIFFUSIONGEMMA_ENGINE` can be `auto`, `transformers`, or `mlx`. Leave it as `auto` unless you are explicitly testing one runtime.
 

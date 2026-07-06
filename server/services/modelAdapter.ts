@@ -1,6 +1,7 @@
 import type { RefineRequest, Trace } from '../../shared/types';
 import { ExternalAdapterProvider } from './modelProviders/externalAdapterProvider';
 import { FallbackProvider } from './modelProviders/fallbackProvider';
+import { RedHatVllmProvider } from './modelProviders/redHatVllmProvider';
 import {
   preloadHfDiffusionGemma,
   preloadMlxDiffusionGemma
@@ -16,6 +17,7 @@ import {
   resolveModelTrace
 } from './modelProviders/resolver';
 import type { ModelTraceProviderStrategy, ProviderDiagnostics } from './modelProviders/types';
+import type { ModelProviderId } from './modelProviders/types';
 
 type FetchLike = typeof fetch;
 
@@ -54,7 +56,7 @@ export async function getModelProviderDiagnostics(
 
 export async function preloadLocalModel(options: ModelAdapterOptions = {}): Promise<{
   ok: boolean;
-  providerId: 'hf-diffusiongemma' | 'mlx-diffusiongemma';
+  providerId: ModelProviderId;
   reason?: string;
 }> {
   const platform = options.platform ?? process.platform;
@@ -62,10 +64,10 @@ export async function preloadLocalModel(options: ModelAdapterOptions = {}): Prom
   const timeoutMs = options.workerTimeoutMs ?? 600000;
   const providerId = platform === 'darwin' ? 'mlx-diffusiongemma' : 'hf-diffusiongemma';
 
-  if (selection === 'external-adapter' || selection === 'fallback') {
+  if (selection === 'external-adapter' || selection === 'redhat-vllm' || selection === 'fallback') {
     return {
       ok: false,
-      providerId,
+      providerId: selection,
       reason: `MODEL_PROVIDER=${selection} does not use a local model worker.`
     };
   }
@@ -112,6 +114,12 @@ function createDefaultProviders(options: ModelAdapterOptions): ModelTraceProvide
 
   return [
     new ExternalAdapterProvider(options.adapterUrl ?? process.env.MODEL_ADAPTER_URL, options.fetchImpl),
+    new RedHatVllmProvider(
+      process.env.REDHAT_VLLM_BASE_URL,
+      process.env.REDHAT_VLLM_MODEL,
+      process.env.REDHAT_VLLM_API_KEY,
+      options.fetchImpl
+    ),
     ...localProviders,
     new FallbackProvider()
   ];

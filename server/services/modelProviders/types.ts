@@ -1,6 +1,11 @@
 import type { RefineRequest, Trace } from '../../../shared/types';
 
-export type ModelProviderId = 'external-adapter' | 'hf-diffusiongemma' | 'mlx-diffusiongemma' | 'fallback';
+export type ModelProviderId =
+  | 'external-adapter'
+  | 'redhat-vllm'
+  | 'hf-diffusiongemma'
+  | 'mlx-diffusiongemma'
+  | 'fallback';
 export type ModelProviderKind = 'external' | 'local-worker' | 'fallback';
 export type ProviderOutcome =
   | 'not-run'

@@ -3,6 +3,7 @@ import type { ProviderDiagnostics } from './modelProviders/types';
 export interface ModelStatusEnvironment {
   modelId?: string;
   engine?: string;
+  redHatVllmModel?: string;
 }
 
 export function formatModelStatusLines(
@@ -10,6 +11,7 @@ export function formatModelStatusLines(
   environment: ModelStatusEnvironment = {}
 ): string[] {
   const modelId = environment.modelId || 'not set';
+  const redHatModel = environment.redHatVllmModel || 'not set';
   const engine = environment.engine || 'auto';
   const activeProvider = diagnostics.providers.find(
     (provider) => provider.available && provider.id !== 'fallback'
@@ -24,6 +26,7 @@ export function formatModelStatusLines(
   return [
     `[model] status: ${headline}`,
     `[model] configured model: ${modelId}`,
+    `[model] Red Hat vLLM model: ${redHatModel}`,
     `[model] engine: ${engine}; provider selection: ${diagnostics.providerSelection}`,
     ...diagnostics.providers.map((provider) => {
       const availability = provider.available ? 'available' : 'unavailable';

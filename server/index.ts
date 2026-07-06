@@ -64,7 +64,8 @@ async function logModelStatus(): Promise<void> {
     });
     for (const line of formatModelStatusLines(diagnostics, {
       modelId: process.env.DIFFUSIONGEMMA_MODEL,
-      engine: process.env.DIFFUSIONGEMMA_ENGINE
+      engine: process.env.DIFFUSIONGEMMA_ENGINE,
+      redHatVllmModel: process.env.REDHAT_VLLM_MODEL
     })) {
       console.log(line);
     }

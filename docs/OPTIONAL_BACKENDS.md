@@ -174,10 +174,31 @@ DIFFUSIONGEMMA_ENGINE=auto
 ```
 
 - `hf-diffusiongemma` uses Hugging Face Transformers and is the preferred Fedora/Linux experiment path.
+- `redhat-vllm` uses an OpenAI-compatible vLLM server for `RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic`. Use this for the Red Hat quant experiment instead of the DiffusionGemma worker.
 - On Fedora/Linux with AMD graphics, install PyTorch from `requirements-fedora-rocm.txt` before the generic Hugging Face packages so the adapter gets ROCm-enabled Torch rather than CPU-only Torch. The current file pins PyTorch `rocm7.2`.
 - Run ROCm GPU allocation and worker smokes from a normal host shell or an approved unsandboxed command. Sandboxed shells may not expose `/dev/kfd` or `/dev/dri`, which makes PyTorch report no available HIP GPU even when the host works.
 - `mlx-diffusiongemma` uses MLX and is the preferred macOS / Apple Silicon experiment path.
-- `auto` keeps the external adapter first, then prefers the platform-appropriate local worker, then falls back.
+- `auto` keeps the external adapter first, then a configured Red Hat vLLM endpoint, then prefers the platform-appropriate local worker, then falls back.
+
+Red Hat quant model notes:
+
+```env
+MODEL_PROVIDER=redhat-vllm
+REDHAT_VLLM_BASE_URL=http://127.0.0.1:8000/v1
+REDHAT_VLLM_MODEL=RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic
+REDHAT_VLLM_API_KEY=EMPTY
+```
+
+The direct Transformers smoke for `RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic` required `compressed-tensors>=0.15.0` and could preload, but generation produced unusable text while reporting missing/unexpected Gemma4 MoE expert weights. Treat that as a failed drop-in path. The model README positions the checkpoint for vLLM, so any further Red Hat quant testing should use the `redhat-vllm` provider and a separately launched vLLM server.
+
+Framework Desktop / Radeon 8060S `gfx1151` test result:
+
+- `rocminfo` reported the AMD Radeon 8060S Graphics as `gfx1151`.
+- The Python 3.12 vLLM test venv with ROCm 7.2 torch could import torch and allocate a tensor on `cuda:0` when run from a host/unsandboxed command.
+- vLLM 0.24.0 could import after pointing the test process at compatible OpenMPI and AMD-SMI libraries, and it reached `Gemma4ForConditionalGeneration` initialisation.
+- Serving failed during FP8 MoE layer construction with `No FP8 MoE backend supports the deployment configuration`.
+- Explicit AITER retries with `VLLM_ROCM_USE_AITER=1` and `VLLM_ROCM_USE_AITER_MOE=1` failed at the same point: `FP8 MoE backend AITER does not support the deployment configuration since kernel does not support current device rocm`.
+- Conclusion: keep the `redhat-vllm` provider as an integration point for compatible vLLM hosts, but do not expect this Red Hat FP8 MoE quant to run on the local Halo / Strix Halo ROCm path yet.
 
 Do not expose staff-only backend controls to visitor phones or public routes.
 

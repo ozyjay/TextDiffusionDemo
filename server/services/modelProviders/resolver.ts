@@ -74,6 +74,7 @@ export async function getProviderDiagnostics(
 export function normaliseProviderSelection(selection: string | undefined): ProviderSelection {
   if (
     selection === 'external-adapter' ||
+    selection === 'redhat-vllm' ||
     selection === 'hf-diffusiongemma' ||
     selection === 'mlx-diffusiongemma' ||
     selection === 'fallback'

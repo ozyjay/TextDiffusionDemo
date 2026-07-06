@@ -39,6 +39,17 @@ class FakeModel:
         return SimpleNamespace(sequences=FakeTokenIds("final reef signal"))
 
 
+class FakeModelRejectsDiffusionKwargs:
+    def __init__(self):
+        self.calls = []
+
+    def generate(self, **kwargs):
+        self.calls.append(kwargs)
+        if "max_denoising_steps" in kwargs:
+            raise ValueError("The following `model_kwargs` are not used by the model: ['max_denoising_steps']")
+        return SimpleNamespace(sequences=FakeTokenIds("fallback final reef signal"))
+
+
 class TransformersEngineTests(unittest.TestCase):
     def test_draft_collector_captures_diffusion_draft_frames(self):
         collector = DiffusionDraftCollector(FakeTokenizer(), total_steps=8, capture_interval=4)
@@ -80,6 +91,32 @@ class TransformersEngineTests(unittest.TestCase):
         self.assertIn("max_denoising_steps", model.kwargs)
         self.assertNotIn("block_length", model.kwargs)
         self.assertNotIn("do_sample", model.kwargs)
+
+    def test_transformers_engine_retries_when_model_rejects_diffusion_kwargs(self):
+        model = FakeModelRejectsDiffusionKwargs()
+        engine = TransformersDiffusionGemmaEngine("test-model")
+        engine._model = model
+        engine._processor = FakeProcessor()
+        engine._torch = SimpleNamespace(no_grad=lambda: _NullContext())
+        engine._build_inputs = lambda *_args: {"input_ids": FakeTokenIds("prompt")}
+        engine._decode = lambda *_args: "fallback final reef signal"
+
+        result = engine.refine(
+            {
+                "outputType": "story",
+                "style": "clear",
+                "creativity": "balanced",
+                "length": "short",
+                "constraint": "include-reef",
+                "steps": 4,
+            },
+            {"prompt": "A reef scientist discovers a strange signal."},
+        )
+
+        self.assertEqual(result["finalText"], "fallback final reef signal")
+        self.assertEqual(len(model.calls), 2)
+        self.assertIn("max_denoising_steps", model.calls[0])
+        self.assertNotIn("max_denoising_steps", model.calls[1])
 
 
 class _NullContext:

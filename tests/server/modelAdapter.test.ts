@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getModelProviderDiagnostics, requestModelTrace } from '../../server/services/modelAdapter';
+import { RedHatVllmProvider } from '../../server/services/modelProviders/redHatVllmProvider';
 import type { ModelTraceProviderStrategy, ProviderAvailability, ProviderStatus } from '../../server/services/modelProviders/types';
 import { refineTrace } from '../../server/services/traceService';
 import type { RefineRequest } from '../../shared/types';
@@ -197,6 +198,44 @@ describe('model adapter', () => {
     expect(workerCalls).toBe(1);
   });
 
+  it('uses a Red Hat vLLM chat completions provider when explicitly selected', async () => {
+    const seedTrace = refineTrace(request);
+    const provider = new RedHatVllmProvider(
+      'http://127.0.0.1:8000/v1',
+      'RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic',
+      'EMPTY',
+      async (url, init) => {
+        if (String(url).endsWith('/models')) {
+          return new Response(JSON.stringify({ data: [] }), { status: 200 });
+        }
+
+        expect(String(url)).toBe('http://127.0.0.1:8000/v1/chat/completions');
+        const body = JSON.parse(String(init?.body));
+        expect(body.model).toBe('RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic');
+        expect(body.messages[0].content).toContain('A robot joins university orientation.');
+        return new Response(JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: 'A robot joined orientation, downloaded the map, and still asked a vending machine for directions.'
+              }
+            }
+          ]
+        }), { status: 200 });
+      }
+    );
+
+    const result = await requestModelTrace(request, seedTrace, {
+      providers: [provider],
+      providerSelection: 'redhat-vllm',
+      timeoutMs: 50
+    });
+
+    expect(result?.id).toBe('robot-orientation-story-redhat-vllm');
+    expect(result?.stages.map((stage) => stage.label)).toEqual(['Noise', 'Rough', 'Clear', 'Styled', 'Final']);
+    expect(result?.stages.at(-1)?.rawText).toContain('vending machine');
+  });
+
   it('uses the longer worker timeout only for local worker providers', async () => {
     const seedTrace = refineTrace(request);
     const seenTimeouts: number[] = [];
@@ -239,6 +278,7 @@ describe('model adapter', () => {
     expect(diagnostics.providerSelection).toBe('auto');
     expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
       'external-adapter',
+      'redhat-vllm',
       'hf-diffusiongemma',
       'fallback'
     ]);
@@ -257,6 +297,7 @@ describe('model adapter', () => {
 
     expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
       'external-adapter',
+      'redhat-vllm',
       'mlx-diffusiongemma',
       'fallback'
     ]);
