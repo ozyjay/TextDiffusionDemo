@@ -33,6 +33,7 @@ export interface Trace {
   style: string;
   controls: TraceControls;
   stages: RefinementStage[];
+  metadata?: Record<string, string | number | boolean | null>;
 }
 
 export interface RefineRequest {
@@ -43,6 +44,11 @@ export interface RefineRequest {
   length: Length;
   constraint: string;
   steps: number;
+  maxLength?: number;
+  denoisingSteps?: number;
+  blockLength?: number;
+  temperature?: number;
+  seed?: number;
   streamDelayMs?: number;
   includeEveryFrame?: boolean;
   mode?: 'scripted' | 'model-assisted';

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getModelProviderDiagnostics, requestModelTrace } from '../../server/services/modelAdapter';
 import { RedHatVllmProvider } from '../../server/services/modelProviders/redHatVllmProvider';
+import { ModelDeckProvider } from '../../server/services/modelProviders/modelDeckProvider';
 import type { ModelTraceProviderStrategy, ProviderAvailability, ProviderStatus } from '../../server/services/modelProviders/types';
 import { refineTrace } from '../../server/services/traceService';
 import type { RefineRequest } from '../../shared/types';
@@ -236,6 +237,41 @@ describe('model adapter', () => {
     expect(result?.stages.at(-1)?.rawText).toContain('vending machine');
   });
 
+  it('uses the native ModelDeck provider when explicitly selected', async () => {
+    const seedTrace = refineTrace(request);
+    const provider = new ModelDeckProvider({
+      model: 'text-diffusion-q4',
+      fetchImpl: async (url) => {
+        if (String(url).endsWith('/v1/health')) {
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        }
+        if (String(url).endsWith('/v1/models')) {
+          return new Response(JSON.stringify({
+            data: [{ id: 'text-diffusion-q4', ready: true }]
+          }), { status: 200 });
+        }
+        expect(String(url)).toBe('http://127.0.0.1:8600/v1/diffuse');
+        return new Response(JSON.stringify({
+          job_id: 'selected-job',
+          state: 'complete',
+          text: 'A robot found orientation by following a very organized duck.'
+        }), { status: 200 });
+      }
+    });
+
+    const result = await requestModelTrace(request, seedTrace, {
+      providers: [provider],
+      providerSelection: 'modeldeck',
+      timeoutMs: 50,
+      modelDeckTimeoutMs: 100
+    });
+
+    expect(result?.id).toBe('robot-orientation-story-modeldeck');
+    expect(result?.stages.at(-1)?.text).toBe(
+      'A robot found orientation by following a very organized duck.'
+    );
+  });
+
   it('uses the longer worker timeout only for local worker providers', async () => {
     const seedTrace = refineTrace(request);
     const seenTimeouts: number[] = [];
@@ -277,6 +313,7 @@ describe('model adapter', () => {
 
     expect(diagnostics.providerSelection).toBe('auto');
     expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
+      'modeldeck',
       'external-adapter',
       'redhat-vllm',
       'hf-diffusiongemma',
@@ -296,6 +333,7 @@ describe('model adapter', () => {
     });
 
     expect(diagnostics.providers.map((provider) => provider.id)).toEqual([
+      'modeldeck',
       'external-adapter',
       'redhat-vllm',
       'mlx-diffusiongemma',

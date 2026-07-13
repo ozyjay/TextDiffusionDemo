@@ -34,6 +34,7 @@ describe('Express API', () => {
     expect(response.body.providerSelection).toBe('auto');
     const platformLocalProvider = process.platform === 'darwin' ? 'mlx-diffusiongemma' : 'hf-diffusiongemma';
     expect(response.body.providers.map((provider: { id: string }) => provider.id)).toEqual([
+      'modeldeck',
       'external-adapter',
       'redhat-vllm',
       platformLocalProvider,

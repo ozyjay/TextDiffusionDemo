@@ -114,6 +114,35 @@ MODEL_PRELOAD=1
 MODEL_PRELOAD_TIMEOUT_MS=600000
 ```
 
+### ModelDeck native diffusion adapter
+
+ModelDeck is supported as a native text-diffusion provider. It uses ModelDeck's `/v1/diffuse` job API, not an OpenAI-compatible completions endpoint. ModelDeck must already be running; the demo remains available in scripted/template fallback mode when its gateway is offline.
+
+Start the Q4 worker from the ModelDeck repository in PowerShell:
+
+```powershell
+./scripts/start_diffusiongemma_q4.ps1
+```
+
+Then start Text Diffusion Lab with:
+
+```bash
+MODEL_PROVIDER=modeldeck
+MODELDECK_BASE_URL=http://127.0.0.1:8600
+MODELDECK_MODEL=text-diffusion-q4
+MODELDECK_TIMEOUT_SECONDS=60
+MODELDECK_POLL_INTERVAL_MS=250
+./scripts/dev.sh
+```
+
+Open `http://127.0.0.1:3300`, enable **Model-assisted** under **Staff controls**, and run a story prompt. The demo submits the prompt and controls to ModelDeck, polls the single active job without overlapping requests, shows unique intermediate whole-text frames, and preserves ModelDeck's final text exactly. Resetting or starting another run aborts the request and asks ModelDeck to cancel its job.
+
+If diagnostics report **gateway unavailable**, confirm ModelDeck is listening at `MODELDECK_BASE_URL` and that `GET /v1/health` succeeds. If they report **model not ready**, start the configured alias and confirm it appears with `ready: true` from `GET /v1/models`. Check the app-side view with:
+
+```bash
+curl http://127.0.0.1:8300/api/model-providers
+```
+
 ### Red Hat Quant Model via vLLM
 
 The Red Hat quantised Gemma checkpoint is a separate staff experiment from the DiffusionGemma worker. Direct Transformers loading of `RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic` can report missing/unexpected MoE expert weights and produce unusable decoded text. The model card describes it as ready for vLLM, so the app exposes an OpenAI-compatible `redhat-vllm` provider instead.
@@ -155,7 +184,7 @@ DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
 $env:DIFFUSIONGEMMA_PYTHON = ".\.venv-diffusiongemma\Scripts\python.exe"
 ```
 
-`MODEL_PROVIDER` can be `auto`, `external-adapter`, `redhat-vllm`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend tries a configured external adapter first, then a configured Red Hat vLLM endpoint, then the platform-appropriate local DiffusionGemma worker, then falls back safely. On Fedora/Linux and Windows, `auto` enables the Hugging Face Transformers worker. On macOS, `auto` enables the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
+`MODEL_PROVIDER` can be `auto`, `modeldeck`, `external-adapter`, `redhat-vllm`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend checks ModelDeck first, then a configured external adapter, a configured Red Hat vLLM endpoint, the platform-appropriate local DiffusionGemma worker, and finally falls back safely. On Fedora/Linux and Windows, `auto` enables the Hugging Face Transformers worker. On macOS, `auto` enables the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
 
 `DIFFUSIONGEMMA_ENGINE` can be `auto`, `transformers`, or `mlx`. Leave it as `auto` unless you are explicitly testing one runtime.
 

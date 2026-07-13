@@ -78,7 +78,9 @@ export function createApp(options: AppOptions = {}) {
       return;
     }
 
-    response.json(await resolveRefinement(refineRequest, options));
+    const controller = new AbortController();
+    request.once('aborted', () => controller.abort());
+    response.json(await resolveRefinement(refineRequest, options, controller.signal));
   });
 
   app.post('/api/refine/stream', async (request, response) => {
@@ -96,9 +98,16 @@ export function createApp(options: AppOptions = {}) {
     });
 
     writeSse(response, 'ready', { ok: true });
+    const controller = new AbortController();
+    request.once('aborted', () => controller.abort());
+    response.once('close', () => {
+      if (!response.writableEnded) {
+        controller.abort();
+      }
+    });
 
     try {
-      const result = await resolveRefinement(refineRequest, options);
+      const result = await resolveRefinement(refineRequest, options, controller.signal);
       const delayMs = clampDelay(refineRequest.streamDelayMs);
       for (const [index, stage] of result.trace.stages.entries()) {
         writeSse(response, 'frame', { index, stage });
@@ -132,6 +141,11 @@ function buildRefineRequest(body: Partial<RefineRequest>): RefineRequest | null 
     length: body.length ?? 'medium',
     constraint: body.constraint ?? 'none',
     steps: body.steps ?? 5,
+    maxLength: typeof body.maxLength === 'number' ? body.maxLength : undefined,
+    denoisingSteps: typeof body.denoisingSteps === 'number' ? body.denoisingSteps : undefined,
+    blockLength: typeof body.blockLength === 'number' ? body.blockLength : undefined,
+    temperature: typeof body.temperature === 'number' ? body.temperature : undefined,
+    seed: typeof body.seed === 'number' ? body.seed : undefined,
     streamDelayMs: typeof body.streamDelayMs === 'number' ? body.streamDelayMs : undefined,
     includeEveryFrame: body.includeEveryFrame === true,
     mode: body.mode ?? 'scripted',
@@ -141,7 +155,8 @@ function buildRefineRequest(body: Partial<RefineRequest>): RefineRequest | null 
 
 async function resolveRefinement(
   refineRequest: RefineRequest,
-  options: AppOptions
+  options: AppOptions,
+  signal?: AbortSignal
 ): Promise<RefinementResult> {
   const customPrompt = refineRequest.mode === 'model-assisted'
     ? normaliseCustomPrompt(refineRequest)
@@ -159,7 +174,8 @@ async function resolveRefinement(
       timeoutMs: options.modelAdapterTimeoutMs ?? envNumber('MODEL_ADAPTER_TIMEOUT_MS', 30000),
       workerTimeoutMs: options.modelWorkerTimeoutMs ?? envNumber('MODEL_WORKER_TIMEOUT_MS', 300000),
       providerSelection: options.modelProvider ?? process.env.MODEL_PROVIDER,
-      modelTraceProvider: options.modelTraceProvider
+      modelTraceProvider: options.modelTraceProvider,
+      signal
     });
 
     if (modelTrace) {

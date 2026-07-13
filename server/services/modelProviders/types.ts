@@ -1,6 +1,7 @@
 import type { RefineRequest, Trace } from '../../../shared/types';
 
 export type ModelProviderId =
+  | 'modeldeck'
   | 'external-adapter'
   | 'redhat-vllm'
   | 'hf-diffusiongemma'
@@ -36,7 +37,7 @@ export interface ModelTraceProviderStrategy {
   kind: ModelProviderKind;
   supports(request: RefineRequest): boolean;
   isAvailable(): Promise<ProviderAvailability>;
-  refine(request: RefineRequest, seedTrace: Trace, timeoutMs: number): Promise<Trace | null>;
+  refine(request: RefineRequest, seedTrace: Trace, timeoutMs: number, signal?: AbortSignal): Promise<Trace | null>;
   lastStatus(): ProviderStatus;
   setStatus(outcome: ProviderOutcome, reason?: string): void;
 }

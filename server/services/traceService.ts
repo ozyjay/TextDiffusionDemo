@@ -27,7 +27,7 @@ export function validateTrace(trace: Trace): Trace {
   const labels = trace.stages.map((stage) => stage.label);
   const canonical = labels.length === stageOrder.length &&
     labels.every((label, index) => label === stageOrder[index]);
-  const modelAssisted = trace.id.endsWith('-diffusiongemma');
+  const modelAssisted = trace.id.endsWith('-diffusiongemma') || trace.id.endsWith('-modeldeck');
   if (!canonical && !modelAssisted) {
     throw new Error('Trace must contain Noise, Rough, Clear, Styled, and Final stages.');
   }

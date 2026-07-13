@@ -2,6 +2,7 @@ import type { RefineRequest, Trace } from '../../shared/types';
 import { ExternalAdapterProvider } from './modelProviders/externalAdapterProvider';
 import { FallbackProvider } from './modelProviders/fallbackProvider';
 import { RedHatVllmProvider } from './modelProviders/redHatVllmProvider';
+import { ModelDeckProvider } from './modelProviders/modelDeckProvider';
 import {
   preloadHfDiffusionGemma,
   preloadMlxDiffusionGemma
@@ -30,6 +31,11 @@ export interface ModelAdapterOptions {
   modelTraceProvider?: WorkerTraceProvider;
   providers?: ModelTraceProviderStrategy[];
   platform?: NodeJS.Platform;
+  signal?: AbortSignal;
+  modelDeckBaseUrl?: string;
+  modelDeckModel?: string;
+  modelDeckTimeoutMs?: number;
+  modelDeckPollIntervalMs?: number;
 }
 
 export async function requestModelTrace(
@@ -43,7 +49,12 @@ export async function requestModelTrace(
   return resolveModelTrace(request, seedTrace, providers, {
     selection: options.providerSelection ?? process.env.MODEL_PROVIDER,
     timeoutMs,
-    providerTimeoutMs: (provider) => provider.kind === 'local-worker' ? workerTimeoutMs : timeoutMs
+    providerTimeoutMs: (provider) => provider.kind === 'local-worker'
+      ? workerTimeoutMs
+      : provider.id === 'modeldeck'
+        ? options.modelDeckTimeoutMs ?? envSeconds('MODELDECK_TIMEOUT_SECONDS', 60) * 1000
+        : timeoutMs,
+    signal: options.signal
   });
 }
 
@@ -64,7 +75,12 @@ export async function preloadLocalModel(options: ModelAdapterOptions = {}): Prom
   const timeoutMs = options.workerTimeoutMs ?? 600000;
   const providerId = platform === 'darwin' ? 'mlx-diffusiongemma' : 'hf-diffusiongemma';
 
-  if (selection === 'external-adapter' || selection === 'redhat-vllm' || selection === 'fallback') {
+  if (
+    selection === 'modeldeck' ||
+    selection === 'external-adapter' ||
+    selection === 'redhat-vllm' ||
+    selection === 'fallback'
+  ) {
     return {
       ok: false,
       providerId: selection,
@@ -113,6 +129,12 @@ function createDefaultProviders(options: ModelAdapterOptions): ModelTraceProvide
   }
 
   return [
+    new ModelDeckProvider({
+      baseUrl: options.modelDeckBaseUrl,
+      model: options.modelDeckModel,
+      pollIntervalMs: options.modelDeckPollIntervalMs,
+      fetchImpl: options.fetchImpl
+    }),
     new ExternalAdapterProvider(options.adapterUrl ?? process.env.MODEL_ADAPTER_URL, options.fetchImpl),
     new RedHatVllmProvider(
       process.env.REDHAT_VLLM_BASE_URL,
@@ -123,4 +145,9 @@ function createDefaultProviders(options: ModelAdapterOptions): ModelTraceProvide
     ...localProviders,
     new FallbackProvider()
   ];
+}
+
+function envSeconds(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }

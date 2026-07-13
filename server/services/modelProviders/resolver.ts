@@ -12,6 +12,7 @@ export interface ResolveOptions {
   selection?: string;
   timeoutMs: number;
   providerTimeoutMs?: (provider: ModelTraceProviderStrategy) => number;
+  signal?: AbortSignal;
 }
 
 export async function resolveModelTrace(
@@ -23,6 +24,9 @@ export async function resolveModelTrace(
   const selectedProviders = selectProviders(providers, normaliseProviderSelection(options.selection));
 
   for (const provider of selectedProviders) {
+    if (options.signal?.aborted) {
+      break;
+    }
     if (!provider.supports(request)) {
       provider.setStatus('unsupported', `Provider does not support ${request.outputType} output.`);
       continue;
@@ -35,7 +39,10 @@ export async function resolveModelTrace(
     }
 
     const timeoutMs = options.providerTimeoutMs?.(provider) ?? options.timeoutMs;
-    const trace = await provider.refine(request, seedTrace, timeoutMs);
+    const trace = await provider.refine(request, seedTrace, timeoutMs, options.signal);
+    if (options.signal?.aborted) {
+      break;
+    }
     if (!trace) {
       if (provider.lastStatus().lastOutcome === 'not-run') {
         provider.setStatus('no-trace', 'Provider returned no trace.');
@@ -74,6 +81,7 @@ export async function getProviderDiagnostics(
 export function normaliseProviderSelection(selection: string | undefined): ProviderSelection {
   if (
     selection === 'external-adapter' ||
+    selection === 'modeldeck' ||
     selection === 'redhat-vllm' ||
     selection === 'hf-diffusiongemma' ||
     selection === 'mlx-diffusiongemma' ||
