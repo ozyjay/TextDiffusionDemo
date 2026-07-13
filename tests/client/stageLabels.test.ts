@@ -63,4 +63,39 @@ describe('stage labels', () => {
     expect(formatStageText(text, false)).toBe('In fields ... forest deep,\n...');
     expect(formatStageText(text, true)).toBe(text);
   });
+
+  it('hides model reasoning from public and debug stage displays', () => {
+    const text = '<think>Work through private reasoning here.</think>\n\nFinal answer: Pi is about 3.14.';
+
+    expect(formatStageText(text, false)).toBe('Pi is about 3.14.');
+    expect(formatStageText(text, true)).toBe('Pi is about 3.14.');
+  });
+
+  it('removes labelled reasoning sections while retaining the final answer', () => {
+    const text = '## Thought\nInternal reasoning.\n\n## Answer\nPi is the ratio of circumference to diameter.';
+
+    expect(formatStageText(text, false)).toBe('Pi is the ratio of circumference to diameter.');
+  });
+
+  it('removes inline thought and answer labels', () => {
+    const text = 'Thought: Calculate the ratio first.\nAnswer: Pi is approximately 3.14.';
+
+    expect(formatStageText(text, false)).toBe('Pi is approximately 3.14.');
+  });
+
+  it('formats common Markdown and simple LaTeX as readable public text', () => {
+    const text = [
+      '### Definition',
+      '**Pi** is approximately `3.14`.',
+      '',
+      '$$\\pi = \\frac{\\text{Circumference}}{\\text{diameter}}$$'
+    ].join('\n');
+
+    expect(formatStageText(text, false)).toBe([
+      'Definition',
+      'Pi is approximately 3.14.',
+      '',
+      'π = Circumference ÷ diameter'
+    ].join('\n'));
+  });
 });
