@@ -232,7 +232,7 @@ function buildGenerationRequest(request: RefineRequest, seedTrace: Trace, model:
     prompt: seedTrace.prompt,
     max_length: maxLength,
     denoising_steps: request.denoisingSteps ?? request.steps,
-    block_length: request.blockLength ?? 256,
+    block_length: request.blockLength ?? maxLength,
     temperature: request.temperature ?? creativityToTemperature(request.creativity),
     seed: request.seed ?? 11,
     stream_intermediate_frames: true
@@ -355,7 +355,7 @@ function describeError(error: unknown, fallback: string): string {
 }
 
 function lengthToMaxLength(length: RefineRequest['length']): number {
-  return length === 'short' ? 96 : length === 'detailed' ? 256 : 160;
+  return length === 'short' ? 64 : length === 'detailed' ? 256 : 128;
 }
 
 function creativityToTemperature(creativity: RefineRequest['creativity']): number {

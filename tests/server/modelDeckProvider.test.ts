@@ -103,6 +103,25 @@ describe('ModelDeck provider', () => {
     expect(trace?.metadata?.seed).toBe(0);
   });
 
+  it('keeps the default block within the selected output length', async () => {
+    let body: Record<string, unknown> = {};
+    const provider = new ModelDeckProvider({
+      fetchImpl: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return json({ job_id: 'short-job', state: 'complete', text: 'Pi is approximately 3.14159.' });
+      }
+    });
+
+    await provider.refine(
+      { ...request, length: 'short' },
+      refineTrace({ ...request, length: 'short' }),
+      100
+    );
+
+    expect(body.max_length).toBe(64);
+    expect(body.block_length).toBe(64);
+  });
+
   it('polls one request at a time and retains unique intermediate frames in arrival order', async () => {
     const seedTrace = refineTrace(request);
     let pollCount = 0;
