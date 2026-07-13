@@ -92,7 +92,7 @@ describe('ModelDeck provider', () => {
 
     expect(body).toEqual({
       model: 'custom-diffusion-alias',
-      prompt: 'Exact prompt for ModelDeck.',
+      prompt: expect.stringContaining('Exact prompt for ModelDeck.'),
       max_length: 0,
       denoising_steps: 0,
       block_length: 0,
@@ -100,6 +100,8 @@ describe('ModelDeck provider', () => {
       seed: 0,
       stream_intermediate_frames: true
     });
+    expect(String(body.prompt)).toContain('Return only the final answer in plain text.');
+    expect(String(body.prompt)).toContain('Include the word "robot" naturally.');
     expect(trace?.metadata?.seed).toBe(0);
   });
 
@@ -118,8 +120,9 @@ describe('ModelDeck provider', () => {
       100
     );
 
-    expect(body.max_length).toBe(64);
-    expect(body.block_length).toBe(64);
+    expect(body.max_length).toBe(96);
+    expect(body.block_length).toBe(96);
+    expect(String(body.prompt)).toContain('at most 50 words and no list');
   });
 
   it('polls one request at a time and retains unique intermediate frames in arrival order', async () => {

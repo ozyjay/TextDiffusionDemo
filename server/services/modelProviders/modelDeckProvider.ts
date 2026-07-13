@@ -229,7 +229,7 @@ function buildGenerationRequest(request: RefineRequest, seedTrace: Trace, model:
   const maxLength = request.maxLength ?? lengthToMaxLength(request.length);
   return {
     model,
-    prompt: seedTrace.prompt,
+    prompt: buildControlledPrompt(request, seedTrace.prompt),
     max_length: maxLength,
     denoising_steps: request.denoisingSteps ?? request.steps,
     block_length: request.blockLength ?? maxLength,
@@ -237,6 +237,20 @@ function buildGenerationRequest(request: RefineRequest, seedTrace: Trace, model:
     seed: request.seed ?? 11,
     stream_intermediate_frames: true
   };
+}
+
+function buildControlledPrompt(request: RefineRequest, prompt: string): string {
+  return [
+    prompt.trim(),
+    '',
+    'Output requirements:',
+    '- Return only the final answer in plain text.',
+    '- Do not include thoughts, reasoning, analysis, headings, Markdown, or LaTeX.',
+    `- Use a ${request.style.trim() || 'clear'} style.`,
+    `- ${lengthInstruction(request.length)}`,
+    `- ${constraintInstruction(request.constraint)}`,
+    '- Finish the answer cleanly before the generation limit.'
+  ].join('\n');
 }
 
 function buildModelDeckTrace(
@@ -355,7 +369,29 @@ function describeError(error: unknown, fallback: string): string {
 }
 
 function lengthToMaxLength(length: RefineRequest['length']): number {
-  return length === 'short' ? 64 : length === 'detailed' ? 256 : 128;
+  return length === 'short' ? 96 : length === 'detailed' ? 256 : 160;
+}
+
+function lengthInstruction(length: RefineRequest['length']): string {
+  if (length === 'short') {
+    return 'Answer in one or two complete sentences, using at most 50 words and no list.';
+  }
+  if (length === 'detailed') {
+    return 'Answer in at most 170 words, using short paragraphs.';
+  }
+  return 'Answer in two to four complete sentences, using at most 90 words.';
+}
+
+function constraintInstruction(constraint: string): string {
+  const instructions: Record<string, string> = {
+    none: 'No additional content constraint.',
+    'include-reef': 'Include the word "reef" naturally.',
+    'include-robot': 'Include the word "robot" naturally.',
+    university: 'Include the word "university" naturally.',
+    'under-12-words': 'Keep the entire answer under 12 words.',
+    rhyme: 'Make the answer rhyme.'
+  };
+  return instructions[constraint.trim().toLowerCase()] ?? `Follow this constraint: ${constraint.trim() || 'none'}.`;
 }
 
 function creativityToTemperature(creativity: RefineRequest['creativity']): number {
