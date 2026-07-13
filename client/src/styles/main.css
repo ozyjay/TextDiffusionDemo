@@ -405,6 +405,10 @@ input[type='range'] {
   color: #17242a;
 }
 
+.page-output.has-stage {
+  align-content: start;
+}
+
 .frame-slider {
   align-self: start;
 }

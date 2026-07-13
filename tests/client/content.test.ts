@@ -118,9 +118,13 @@ describe('public copy', () => {
   });
 
   it('lets long response output scroll inside the stage panel', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'client/src/App.vue'), 'utf8');
     const styles = readFileSync(resolve(process.cwd(), 'client/src/styles/main.css'), 'utf8');
 
+    expect(appSource).toContain("'has-stage': Boolean(currentStage)");
     expect(styles).toContain('.page-output');
+    expect(styles).toContain('.page-output.has-stage');
+    expect(styles).toContain('align-content: start');
     expect(styles).toContain('overflow-y: auto');
     expect(styles).toContain('overscroll-behavior: contain');
   });

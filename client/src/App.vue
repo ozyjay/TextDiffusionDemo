@@ -651,7 +651,14 @@ function createStreamingTrace(request: RefineRequest): Trace {
         </ol>
       </aside>
 
-      <article class="page-output" :class="{ code: displayedOutputType === 'python', 'token-grid-view': viewMode === 'grid' }">
+      <article
+        class="page-output"
+        :class="{
+          code: displayedOutputType === 'python',
+          'token-grid-view': viewMode === 'grid',
+          'has-stage': Boolean(currentStage)
+        }"
+      >
         <div v-if="viewMode === 'frames' || viewMode === 'grid'" class="frame-slider">
           <label>
             <span class="range-label">
