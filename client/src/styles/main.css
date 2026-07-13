@@ -285,6 +285,13 @@ select option:checked {
   gap: 12px;
 }
 
+.control-help {
+  color: #9fb4bd;
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
 input[type='range'] {
   width: 100%;
   accent-color: #f8d66d;

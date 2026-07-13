@@ -206,6 +206,12 @@ const modelProgressText = computed(() => {
   return progress.label;
 });
 
+const displayedStagesHelp = computed(() =>
+  viewMode.value === 'steps'
+    ? 'Presentation only: samples draft frames, then shows the final response. ModelDeck still runs its full denoising passes.'
+    : 'Every-frame inspection overrides this count and shows all frames returned by the model.'
+);
+
 onMounted(async () => {
   prompts.value = await fetchPrompts();
   await refreshModelStatus();
@@ -551,10 +557,11 @@ function createStreamingTrace(request: RefineRequest): Trace {
         </label>
         <label>
           <span class="range-label">
-            Steps
+            Displayed stages
             <strong>{{ steps }}</strong>
           </span>
           <input v-model.number="steps" min="3" max="8" step="1" type="range" />
+          <small class="control-help">{{ displayedStagesHelp }}</small>
         </label>
         <label>
           Speed
