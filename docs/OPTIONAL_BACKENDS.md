@@ -173,7 +173,7 @@ MODEL_PROVIDER=auto
 DIFFUSIONGEMMA_ENGINE=auto
 ```
 
-- `modeldeck` uses ModelDeck's native asynchronous text-diffusion API at `MODELDECK_BASE_URL` (default `http://127.0.0.1:8600`) with alias `MODELDECK_MODEL` (default `text-diffusion-q4`). ModelDeck must already be running. Start its Q4 worker with `./scripts/start_diffusiongemma_q4.ps1` from the ModelDeck repository, then select it with `MODEL_PROVIDER=modeldeck`.
+- `modeldeck` uses ModelDeck's native asynchronous text-diffusion API at `MODELDECK_BASE_URL` (default `http://127.0.0.1:8600`) with alias `MODELDECK_MODEL` (default `text-diffusion-q4`). `MODELDECK_DENOISING_STEPS` defaults to 48 independently of the UI's visible-stage count. Normal view samples intermediate drafts, while every-frame view retains them all; both end with the terminal ModelDeck response. ModelDeck must already be running. Start its Q4 worker with `./scripts/start_diffusiongemma_q4.ps1` from the ModelDeck repository, then select it with `MODEL_PROVIDER=modeldeck`.
 - `hf-diffusiongemma` uses Hugging Face Transformers and is the preferred Fedora/Linux experiment path.
 - `redhat-vllm` uses an OpenAI-compatible vLLM server for `RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic`. Use this for the Red Hat quant experiment instead of the DiffusionGemma worker.
 - On Fedora/Linux with AMD graphics, install PyTorch from `requirements-fedora-rocm.txt` before the generic Hugging Face packages so the adapter gets ROCm-enabled Torch rather than CPU-only Torch. The current file pins PyTorch `rocm7.2`.

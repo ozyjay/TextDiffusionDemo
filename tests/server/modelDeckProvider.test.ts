@@ -65,6 +65,7 @@ describe('ModelDeck provider', () => {
   it('maps request fields, preserves explicit zero values, and propagates the seed', async () => {
     const mappedRequest: RefineRequest = {
       ...request,
+      constraint: 'none',
       steps: 0,
       maxLength: 0,
       denoisingSteps: 0,
@@ -72,7 +73,7 @@ describe('ModelDeck provider', () => {
       temperature: 0,
       seed: 0
     };
-    const seedTrace = refineTrace({ ...request, steps: 5 });
+    const seedTrace = refineTrace({ ...request, constraint: 'none', steps: 5 });
     seedTrace.prompt = 'Exact prompt for ModelDeck.';
     let body: Record<string, unknown> = {};
     const provider = new ModelDeckProvider({
@@ -101,7 +102,7 @@ describe('ModelDeck provider', () => {
       stream_intermediate_frames: true
     });
     expect(String(body.prompt)).toContain('Return only the final answer in plain text.');
-    expect(String(body.prompt)).toContain('Include the word "robot" naturally.');
+    expect(String(body.prompt)).toContain('No additional content constraint.');
     expect(trace?.metadata?.seed).toBe(0);
   });
 
@@ -125,8 +126,118 @@ describe('ModelDeck provider', () => {
     expect(String(body.prompt)).toContain('at most 50 words and no list');
   });
 
+  it('uses 48 denoising passes while sampling the requested number of visible stages', async () => {
+    let body: Record<string, unknown> = {};
+    const frames = Array.from({ length: 8 }, (_value, index) => ({
+      step: index + 1,
+      total_steps: 48,
+      text: `Frame ${index + 1}.`
+    }));
+    const provider = new ModelDeckProvider({
+      fetchImpl: async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return json({
+          job_id: 'sampled-job',
+          state: 'complete',
+          text: 'The exact terminal response.',
+          frames
+        });
+      }
+    });
+
+    const trace = await provider.refine(
+      { ...request, constraint: 'none', steps: 5 },
+      refineTrace({ ...request, constraint: 'none', steps: 5 }),
+      100
+    );
+
+    expect(body.denoising_steps).toBe(48);
+    expect(trace?.stages.map((stage) => stage.text)).toEqual([
+      'Frame 1.',
+      'Frame 3.',
+      'Frame 6.',
+      'Frame 8.',
+      'The exact terminal response.'
+    ]);
+    expect(trace?.metadata).toMatchObject({
+      denoisingSteps: 48,
+      returnedFrameCount: 8,
+      displayedFrameCount: 4,
+      retried: false
+    });
+  });
+
+  it('keeps every unique intermediate frame when requested', async () => {
+    const provider = new ModelDeckProvider({
+      fetchImpl: async () => json({
+        job_id: 'every-frame-job',
+        state: 'complete',
+        text: 'The exact terminal response.',
+        frames: [
+          { step: 1, total_steps: 48, text: 'First frame.' },
+          { step: 24, total_steps: 48, text: 'Middle frame.' },
+          { step: 47, total_steps: 48, text: 'Last draft frame.' }
+        ]
+      })
+    });
+
+    const trace = await provider.refine(
+      { ...request, constraint: 'none', includeEveryFrame: true },
+      refineTrace({ ...request, constraint: 'none' }),
+      100
+    );
+
+    expect(trace?.stages.map((stage) => stage.text)).toEqual([
+      'First frame.',
+      'Middle frame.',
+      'Last draft frame.',
+      'The exact terminal response.'
+    ]);
+  });
+
+  it('retries one corrupt terminal response with safer full-denoising settings', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    let requestCount = 0;
+    const provider = new ModelDeckProvider({
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        requestCount += 1;
+        return requestCount === 1
+          ? json({ job_id: 'bad-job', state: 'complete', text: 'robot robot robot ???' })
+          : json({ job_id: 'retry-job', state: 'complete', text: 'A robot arrived safely at orientation.' });
+      }
+    });
+
+    const trace = await provider.refine(request, refineTrace(request), 100);
+
+    expect(requestCount).toBe(2);
+    expect(bodies[1]).toMatchObject({
+      denoising_steps: 48,
+      max_length: 96,
+      temperature: 0.4,
+      seed: 12
+    });
+    expect(trace?.stages.at(-1)?.text).toBe('A robot arrived safely at orientation.');
+    expect(trace?.metadata?.retried).toBe(true);
+  });
+
+  it('rejects the trace when both terminal responses are corrupt', async () => {
+    let requestCount = 0;
+    const provider = new ModelDeckProvider({
+      fetchImpl: async () => {
+        requestCount += 1;
+        return json({ job_id: `bad-job-${requestCount}`, state: 'complete', text: 'robot robot robot ???' });
+      }
+    });
+
+    await expect(provider.refine(request, refineTrace(request), 100)).resolves.toBeNull();
+    expect(requestCount).toBe(2);
+    expect(provider.lastStatus().lastOutcome).toBe('invalid');
+  });
+
   it('polls one request at a time and retains unique intermediate frames in arrival order', async () => {
-    const seedTrace = refineTrace(request);
+    const noConstraintRequest = { ...request, constraint: 'none' };
+    const seedTrace = refineTrace(noConstraintRequest);
     let pollCount = 0;
     let activePolls = 0;
     let maxActivePolls = 0;
@@ -169,7 +280,7 @@ describe('ModelDeck provider', () => {
       }
     });
 
-    const trace = await provider.refine(request, seedTrace, 200);
+    const trace = await provider.refine(noConstraintRequest, seedTrace, 200);
 
     expect(pollCount).toBe(2);
     expect(maxActivePolls).toBe(1);

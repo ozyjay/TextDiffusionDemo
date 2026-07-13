@@ -130,12 +130,15 @@ Then start Text Diffusion Lab with:
 MODEL_PROVIDER=modeldeck
 MODELDECK_BASE_URL=http://127.0.0.1:8600
 MODELDECK_MODEL=text-diffusion-q4
+MODELDECK_DENOISING_STEPS=48
 MODELDECK_TIMEOUT_SECONDS=60
 MODELDECK_POLL_INTERVAL_MS=250
 ./scripts/dev.sh
 ```
 
-Open `http://127.0.0.1:3300`, enable **Model-assisted** under **Staff controls**, and run a story prompt. The demo submits the prompt and controls to ModelDeck, polls the single active job without overlapping requests, shows unique intermediate whole-text frames, and preserves ModelDeck's final text exactly. Resetting or starting another run aborts the request and asks ModelDeck to cancel its job.
+Open `http://127.0.0.1:3300`, enable **Model-assisted** under **Staff controls**, and run a story prompt. ModelDeck performs 48 denoising passes by default; the visitor-facing **Steps** control changes only how many intermediate stages are sampled for display. **Every frame** and **Token grid** retain every unique returned draft. A successful run always ends with ModelDeck's terminal `job.text` unchanged.
+
+Obvious corruption such as unresolved masks, severe repetition, or an unmet explicit constraint triggers one safer 48-pass retry. If that also fails, the public canvas hides the malformed response and shows a controlled retry message. Resetting or starting another run aborts the request and asks ModelDeck to cancel its job.
 
 If diagnostics report **gateway unavailable**, confirm ModelDeck is listening at `MODELDECK_BASE_URL` and that `GET /v1/health` succeeds. If they report **model not ready**, start the configured alias and confirm it appears with `ready: true` from `GET /v1/models`. Check the app-side view with:
 

@@ -4,6 +4,7 @@ import { createApp } from '../../server/app';
 
 describe('Express API', () => {
   const app = createApp();
+  const localModelProvider = process.platform === 'darwin' ? 'mlx-diffusiongemma' : 'hf-diffusiongemma';
 
   it('reports health with the fixed backend port', async () => {
     const response = await request(app).get('/api/health').expect(200);
@@ -123,7 +124,10 @@ describe('Express API', () => {
   });
 
   it('falls back to scripted output when model-assisted mode has no adapter', async () => {
-    const response = await request(createApp({ modelTraceProvider: async () => null }))
+    const response = await request(createApp({
+      modelProvider: localModelProvider,
+      modelTraceProvider: async () => null
+    }))
       .post('/api/refine')
       .send({
         outputType: 'story',
@@ -144,6 +148,7 @@ describe('Express API', () => {
   it('uses backend-managed model worker traces when no external adapter URL is configured', async () => {
     let requestedSteps = 0;
     const response = await request(createApp({
+      modelProvider: localModelProvider,
       modelTraceProvider: async (modelRequest, seedTrace) => {
         requestedSteps = modelRequest.steps;
         return {
@@ -185,6 +190,7 @@ describe('Express API', () => {
     const customPrompt = 'A robot discovers the quietest study corner on campus.';
 
     const response = await request(createApp({
+      modelProvider: localModelProvider,
       modelTraceProvider: async (_modelRequest, seedTrace) => {
         providerPrompt = seedTrace.prompt;
         return {
@@ -216,10 +222,13 @@ describe('Express API', () => {
     expect(response.body.trace.prompt).toBe(customPrompt);
   });
 
-  it('keeps the visible custom prompt on model fallback while using the curated scaffold', async () => {
+  it('keeps the visible custom prompt and hides unrelated scripted text on model fallback', async () => {
     const customPrompt = 'A tiny AI helps a lecturer find missing lab notes.';
 
-    const response = await request(createApp({ modelTraceProvider: async () => null }))
+    const response = await request(createApp({
+      modelProvider: localModelProvider,
+      modelTraceProvider: async () => null
+    }))
       .post('/api/refine')
       .send({
         outputType: 'story',
@@ -236,13 +245,16 @@ describe('Express API', () => {
 
     expect(response.body.mode).toBe('model-fallback');
     expect(response.body.trace.prompt).toBe(customPrompt);
-    expect(response.body.trace.stages.map((stage: { label: string }) => stage.label)).toEqual([
-      'Noise',
-      'Rough',
-      'Clear',
-      'Styled',
-      'Final'
+    expect(response.body.trace.stages).toEqual([
+      expect.objectContaining({
+        label: 'Not converged',
+        text: expect.stringContaining('did not converge cleanly')
+      })
     ]);
+    expect(response.body.trace.metadata).toMatchObject({
+      provider: 'fallback',
+      safeFallback: true
+    });
   });
 
   it('ignores custom prompts for the Python lane', async () => {

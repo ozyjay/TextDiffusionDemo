@@ -182,7 +182,10 @@ async function resolveRefinement(
       return { mode: 'model-assisted', trace: modelTrace };
     }
 
-    return { mode: 'model-fallback', trace: seedTrace };
+    return {
+      mode: 'model-fallback',
+      trace: customPrompt ? buildSafeCustomPromptFallback(seedTrace) : seedTrace
+    };
   }
 
   return {
@@ -202,6 +205,24 @@ function buildSeedTrace(refineRequest: RefineRequest, promptOverride: string | n
       length: refineRequest.length,
       constraint: refineRequest.constraint,
       steps: refineRequest.steps
+    }
+  };
+}
+
+function buildSafeCustomPromptFallback(seedTrace: Trace): Trace {
+  return {
+    ...seedTrace,
+    id: `${seedTrace.promptId}-model-fallback`,
+    stages: [
+      {
+        label: 'Not converged',
+        text: 'This refinement did not converge cleanly. Please retry or choose a curated fallback prompt.',
+        note: 'Malformed or unavailable model output was hidden.'
+      }
+    ],
+    metadata: {
+      provider: 'fallback',
+      safeFallback: true
     }
   };
 }

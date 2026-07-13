@@ -1,4 +1,5 @@
 import type { RefineRequest, RefinementStage, Trace } from '../../../shared/types';
+import { assessModelOutput } from '../modelOutputQuality';
 import { BaseModelProvider } from './base';
 import type { ModelTraceProviderStrategy, ProviderAvailability } from './types';
 
@@ -30,6 +31,7 @@ interface ModelDeckJob {
 export interface ModelDeckProviderOptions {
   baseUrl?: string;
   model?: string;
+  denoisingSteps?: number;
   pollIntervalMs?: number;
   fetchImpl?: FetchLike;
 }
@@ -41,6 +43,7 @@ export class ModelDeckProvider extends BaseModelProvider implements ModelTracePr
 
   private readonly baseUrl: string;
   private readonly model: string;
+  private readonly denoisingSteps: number;
   private readonly pollIntervalMs: number;
   private readonly fetchImpl: FetchLike;
 
@@ -48,6 +51,12 @@ export class ModelDeckProvider extends BaseModelProvider implements ModelTracePr
     super();
     this.baseUrl = normaliseBaseUrl(options.baseUrl ?? process.env.MODELDECK_BASE_URL ?? 'http://127.0.0.1:8600');
     this.model = options.model ?? process.env.MODELDECK_MODEL ?? 'text-diffusion-q4';
+    this.denoisingSteps = normaliseInteger(
+      options.denoisingSteps ?? Number(process.env.MODELDECK_DENOISING_STEPS),
+      48,
+      1,
+      48
+    );
     this.pollIntervalMs = normalisePositiveNumber(
       options.pollIntervalMs ?? Number(process.env.MODELDECK_POLL_INTERVAL_MS),
       250
@@ -141,62 +150,86 @@ export class ModelDeckProvider extends BaseModelProvider implements ModelTracePr
     let jobId: string | undefined;
 
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}/v1/diffuse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildGenerationRequest(request, seedTrace, this.model)),
-        signal: controller.signal
-      });
-      if (!response.ok) {
-        this.setStatus('error', await httpError('ModelDeck generation submission', response));
-        return null;
-      }
-
-      const submitted = parseJob(await readJson(response));
-      jobId = submitted?.job_id;
-      if (!submitted || !jobId) {
-        this.setStatus('invalid', 'ModelDeck returned a malformed job response without job_id or state.');
-        return null;
-      }
-
-      let job = submitted;
-      const frames: ModelDeckFrame[] = [];
-      const seenFrames = new Set<string>();
-      appendFrames(frames, seenFrames, job.frames);
-
-      while (job.state === 'queued' || job.state === 'running') {
-        await abortableDelay(this.pollIntervalMs, controller.signal);
-        const pollResponse = await this.fetchImpl(
-          `${this.baseUrl}/v1/jobs/${encodeURIComponent(jobId)}`,
-          { method: 'GET', signal: controller.signal }
-        );
-        if (!pollResponse.ok) {
-          this.setStatus('error', await httpError('ModelDeck job poll', pollResponse));
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const generationRequest = attempt === 0
+          ? request
+          : buildSaferRetryRequest(request, this.denoisingSteps);
+        const response = await this.fetchImpl(`${this.baseUrl}/v1/diffuse`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(buildGenerationRequest(generationRequest, seedTrace, this.model, this.denoisingSteps)),
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          this.setStatus('error', await httpError('ModelDeck generation submission', response));
           return null;
         }
-        const nextJob = parseJob(await readJson(pollResponse));
-        if (!nextJob || nextJob.job_id !== jobId) {
-          this.setStatus('invalid', 'ModelDeck returned a malformed or mismatched job response.');
+
+        const submitted = parseJob(await readJson(response));
+        jobId = submitted?.job_id;
+        if (!submitted || !jobId) {
+          this.setStatus('invalid', 'ModelDeck returned a malformed job response without job_id or state.');
           return null;
         }
-        job = nextJob;
+
+        let job = submitted;
+        const frames: ModelDeckFrame[] = [];
+        const seenFrames = new Set<string>();
         appendFrames(frames, seenFrames, job.frames);
+
+        while (job.state === 'queued' || job.state === 'running') {
+          await abortableDelay(this.pollIntervalMs, controller.signal);
+          const pollResponse = await this.fetchImpl(
+            `${this.baseUrl}/v1/jobs/${encodeURIComponent(jobId)}`,
+            { method: 'GET', signal: controller.signal }
+          );
+          if (!pollResponse.ok) {
+            this.setStatus('error', await httpError('ModelDeck job poll', pollResponse));
+            return null;
+          }
+          const nextJob = parseJob(await readJson(pollResponse));
+          if (!nextJob || nextJob.job_id !== jobId) {
+            this.setStatus('invalid', 'ModelDeck returned a malformed or mismatched job response.');
+            return null;
+          }
+          job = nextJob;
+          appendFrames(frames, seenFrames, job.frames);
+        }
+
+        if (job.state === 'failed') {
+          this.setStatus('error', `ModelDeck job failed${safeDetail(job.error ?? job.detail)}.`);
+          return null;
+        }
+        if (job.state === 'cancelled') {
+          this.setStatus('error', 'ModelDeck job was cancelled.');
+          return null;
+        }
+        if (job.state !== 'complete' || typeof job.text !== 'string') {
+          this.setStatus('invalid', 'ModelDeck completed with a malformed response or unknown job state.');
+          return null;
+        }
+
+        const quality = assessModelOutput(job.text, request);
+        if (quality.valid) {
+          const effectiveDenoisingSteps = generationRequest.denoisingSteps ?? this.denoisingSteps;
+          return buildModelDeckTrace(
+            seedTrace,
+            request,
+            job,
+            frames,
+            this.model,
+            effectiveDenoisingSteps,
+            attempt === 1
+          );
+        }
+        if (attempt === 1) {
+          this.setStatus('invalid', `ModelDeck output failed quality checks: ${quality.reasons.join(' ')}`);
+          return null;
+        }
+        jobId = undefined;
       }
 
-      if (job.state === 'failed') {
-        this.setStatus('error', `ModelDeck job failed${safeDetail(job.error ?? job.detail)}.`);
-        return null;
-      }
-      if (job.state === 'cancelled') {
-        this.setStatus('error', 'ModelDeck job was cancelled.');
-        return null;
-      }
-      if (job.state !== 'complete' || typeof job.text !== 'string') {
-        this.setStatus('invalid', 'ModelDeck completed with a malformed response or unknown job state.');
-        return null;
-      }
-
-      return buildModelDeckTrace(seedTrace, job, frames, this.model);
+      return null;
     } catch (error) {
       if (jobId && controller.signal.aborted) {
         await this.cancelJob(jobId);
@@ -225,13 +258,18 @@ export class ModelDeckProvider extends BaseModelProvider implements ModelTracePr
   }
 }
 
-function buildGenerationRequest(request: RefineRequest, seedTrace: Trace, model: string) {
+function buildGenerationRequest(
+  request: RefineRequest,
+  seedTrace: Trace,
+  model: string,
+  defaultDenoisingSteps: number
+) {
   const maxLength = request.maxLength ?? lengthToMaxLength(request.length);
   return {
     model,
     prompt: buildControlledPrompt(request, seedTrace.prompt),
     max_length: maxLength,
-    denoising_steps: request.denoisingSteps ?? request.steps,
+    denoising_steps: request.denoisingSteps ?? defaultDenoisingSteps,
     block_length: request.blockLength ?? maxLength,
     temperature: request.temperature ?? creativityToTemperature(request.creativity),
     seed: request.seed ?? 11,
@@ -255,12 +293,18 @@ function buildControlledPrompt(request: RefineRequest, prompt: string): string {
 
 function buildModelDeckTrace(
   seedTrace: Trace,
+  request: RefineRequest,
   job: ModelDeckJob,
   frames: ModelDeckFrame[],
-  configuredModel: string
+  configuredModel: string,
+  denoisingSteps: number,
+  retried: boolean
 ): Trace {
-  const stages: RefinementStage[] = frames
-    .filter((frame) => !frame.complete)
+  const intermediateFrames = frames.filter((frame) => !frame.complete);
+  const displayedFrames = request.includeEveryFrame
+    ? intermediateFrames
+    : sampleFrames(intermediateFrames, Math.max(0, request.steps - 1));
+  const stages: RefinementStage[] = displayedFrames
     .map((frame) => ({
       label: `Frame ${frame.step}/${frame.total_steps ?? '?'}`,
       text: frame.text,
@@ -282,8 +326,37 @@ function buildModelDeckTrace(
       model: job.model ?? configuredModel,
       seed: job.seed ?? null,
       frameCount: job.frame_count ?? frames.length,
+      returnedFrameCount: intermediateFrames.length,
+      displayedFrameCount: displayedFrames.length,
+      denoisingSteps,
+      retried,
       totalSeconds: job.metrics?.total_seconds ?? null
     }
+  };
+}
+
+function sampleFrames(frames: ModelDeckFrame[], count: number): ModelDeckFrame[] {
+  if (count <= 0) {
+    return [];
+  }
+  if (frames.length <= count) {
+    return frames;
+  }
+  if (count === 1) {
+    return [frames[0]];
+  }
+  return Array.from({ length: count }, (_value, index) =>
+    frames[Math.round((index * (frames.length - 1)) / (count - 1))]
+  );
+}
+
+function buildSaferRetryRequest(request: RefineRequest, denoisingSteps: number): RefineRequest {
+  return {
+    ...request,
+    maxLength: Math.min(request.maxLength ?? lengthToMaxLength(request.length), 96),
+    denoisingSteps,
+    temperature: 0.4,
+    seed: (request.seed ?? 11) + 1
   };
 }
 
@@ -404,6 +477,13 @@ function normaliseBaseUrl(value: string): string {
 
 function normalisePositiveNumber(value: number, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function normaliseInteger(value: number, fallback: number, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(minimum, Math.min(maximum, Math.round(value)));
 }
 
 function isJobState(value: unknown): value is JobState {

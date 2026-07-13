@@ -140,6 +140,11 @@ function publicStageDisplay(label: string): Pick<StageDisplay, 'label' | 'detail
         label: 'Final polish',
         detail: 'The text converges into the final output'
       };
+    case 'Not converged':
+      return {
+        label: 'Try again',
+        detail: 'The model output did not converge cleanly'
+      };
     default:
       return {
         label,

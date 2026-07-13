@@ -6,6 +6,7 @@ import { getNextAutoplaySelection, type AutoplaySelection } from './services/aut
 import { buildHighlightedSegments } from './services/stageDiff';
 import { buildStageDisplay, formatStageText } from './services/stageLabels';
 import { buildTokenCells } from './services/tokenGrid';
+import { defaultConstraintForPrompt } from './services/promptDefaults';
 import type {
   Creativity,
   Length,
@@ -144,6 +145,36 @@ const currentStageDisplay = computed(() =>
 const rawModelText = computed(() =>
   activeTrace.value?.stages.find((stage) => stage.rawText)?.rawText?.trim() ?? ''
 );
+
+const currentRunStatus = computed(() => {
+  if (!activeTrace.value) {
+    return {
+      label: 'No run yet',
+      detail: 'Choose a prompt and start the demo.'
+    };
+  }
+
+  const provider = activeTrace.value.metadata?.provider;
+  if (provider === 'modeldeck') {
+    const retried = activeTrace.value.metadata?.retried === true;
+    return {
+      label: retried ? 'ModelDeck - safer retry' : 'ModelDeck - final response',
+      detail: `${activeTrace.value.metadata?.denoisingSteps ?? 48} denoising passes; terminal response displayed.`
+    };
+  }
+  if (mode.value === 'model-fallback') {
+    return {
+      label: 'Safe fallback',
+      detail: activeTrace.value.metadata?.safeFallback === true
+        ? 'Malformed or unavailable model output is hidden.'
+        : 'The offline scripted trace is being shown.'
+    };
+  }
+  return {
+    label: mode.value === 'replay' ? 'Scripted replay' : 'Scripted trace',
+    detail: 'Reliable offline staged refinement.'
+  };
+});
 
 const modelStatusLabel = computed(() => {
   const labels = {
@@ -380,7 +411,7 @@ function selectPrompt(promptId: string) {
 }
 
 function syncConstraint() {
-  constraint.value = requestOutputType.value === 'story' ? 'include-reef' : 'none';
+  constraint.value = defaultConstraintForPrompt(promptSource.value, selectedPromptId.value);
 }
 
 function selectStage(index: number) {
@@ -537,8 +568,13 @@ function createStreamingTrace(request: RefineRequest): Trace {
 
       <section class="staff-controls" aria-label="Staff controls">
         <span class="label">Staff controls</span>
+        <div class="model-status current-run-status" aria-live="polite">
+          <span>Current run</span>
+          <strong>{{ currentRunStatus.label }}</strong>
+          <small>{{ currentRunStatus.detail }}</small>
+        </div>
         <div class="model-status" :class="`state-${modelStatus.state}`" aria-live="polite">
-          <span>Model: {{ modelStatusLabel }}</span>
+          <span>Local preload: {{ modelStatusLabel }}</span>
           <strong>{{ modelStatus.providerId ?? 'local fallback' }}</strong>
           <div
             class="model-progress"
