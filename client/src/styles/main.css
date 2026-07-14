@@ -292,9 +292,26 @@ select option:checked {
   line-height: 1.2;
 }
 
+.range-endpoints {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -3px;
+  color: #9fb4bd;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
 input[type='range'] {
   width: 100%;
   accent-color: #f8d66d;
+}
+
+.control-disabled {
+  opacity: 0.56;
+}
+
+.control-disabled input {
+  cursor: not-allowed;
 }
 
 .button-row {
@@ -604,13 +621,100 @@ input[type='range'] {
 .staff-controls {
   display: grid;
   grid-template-columns: 1fr;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
+  gap: 9px;
+  padding: 10px;
 }
 
 .staff-controls .label {
   margin: 0;
+}
+
+.staff-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.staff-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.staff-heading small,
+.staff-group-help {
+  color: #9fb4bd;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.reset-action {
+  min-height: 34px;
+  padding: 0.35rem 0.65rem;
+  border-color: rgba(255, 154, 139, 0.55);
+  color: #ffd2ca;
+}
+
+.staff-status-grid,
+.staff-lower-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.staff-group {
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+.staff-group legend {
+  padding: 0 5px;
+  color: #8ee7d8;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.display-mode-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.display-mode-options button {
+  min-height: 52px;
+  display: grid;
+  place-content: center;
+  gap: 2px;
+  padding: 0.4rem 0.5rem;
+}
+
+.display-mode-options button small {
+  color: #b7c8cf;
+  font-size: 0.7rem;
+  line-height: 1.1;
+}
+
+.display-mode-options button.selected small {
+  color: #183037;
+}
+
+.staff-group-help {
+  display: block;
+  margin-top: 6px;
+}
+
+.staff-actions {
+  justify-content: flex-start;
+}
+
+.diagnostic-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .model-status {
@@ -695,6 +799,7 @@ input[type='range'] {
 .checkbox-line {
   display: flex;
   align-items: center;
+  gap: 6px;
   white-space: nowrap;
 }
 
@@ -747,6 +852,11 @@ input[type='range'] {
   }
 
   .staff-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .staff-status-grid,
+  .staff-lower-grid {
     grid-template-columns: 1fr;
   }
 

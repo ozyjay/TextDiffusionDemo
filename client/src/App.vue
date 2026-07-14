@@ -7,6 +7,8 @@ import { buildHighlightedSegments } from './services/stageDiff';
 import { buildStageDisplay, formatStageText } from './services/stageLabels';
 import { buildTokenCells } from './services/tokenGrid';
 import { defaultConstraintForPrompt } from './services/promptDefaults';
+import { getDisplayModeSettings, type DisplayMode } from './services/displayMode';
+import { getPlaybackSpeedSetting } from './services/playbackSpeed';
 import type {
   Creativity,
   Length,
@@ -37,7 +39,7 @@ const creativity = ref<Creativity>('balanced');
 const length = ref<Length>('medium');
 const constraint = ref('none');
 const steps = ref(5);
-const speed = ref(2100);
+const speedLevel = ref(3);
 const activeTrace = ref<Trace | null>(null);
 const activeIndex = ref(-1);
 const mode = ref('scripted');
@@ -54,7 +56,7 @@ const modelStatus = ref<ModelRuntimeStatus>({
 const showDebugLabels = ref(false);
 const showRawModelText = ref(false);
 const lastAutoplaySelection = ref<AutoplaySelection | null>(null);
-const viewMode = ref<'steps' | 'frames' | 'grid'>('steps');
+const viewMode = ref<DisplayMode>('steps');
 let timer: number | undefined;
 let autoplayTimer: number | undefined;
 let modelStatusTimer: number | undefined;
@@ -206,10 +208,10 @@ const modelProgressText = computed(() => {
   return progress.label;
 });
 
-const displayedStagesHelp = computed(() =>
-  viewMode.value === 'steps'
-    ? 'Presentation only: samples draft frames, then shows the final response. ModelDeck still runs its full denoising passes.'
-    : 'Every-frame inspection overrides this count and shows all frames returned by the model.'
+const displayModeSettings = computed(() => getDisplayModeSettings(viewMode.value));
+const playbackSpeed = computed(() => getPlaybackSpeedSetting(speedLevel.value));
+const effectivePlaybackDelay = computed(() =>
+  reducedMotion.value ? Math.min(playbackSpeed.value.delayMs, 500) : playbackSpeed.value.delayMs
 );
 
 onMounted(async () => {
@@ -264,8 +266,8 @@ async function runDemo(nextMode = 'scripted') {
     length: length.value,
     constraint: constraint.value,
     steps: steps.value,
-    streamDelayMs: reducedMotion.value ? Math.min(speed.value, 500) : speed.value,
-    includeEveryFrame: viewMode.value === 'frames' || viewMode.value === 'grid',
+    streamDelayMs: effectivePlaybackDelay.value,
+    includeEveryFrame: displayModeSettings.value.requestEveryFrame,
     mode: usingCustomPrompt.value || modelAssisted.value ? 'model-assisted' : 'scripted'
   };
   if (usingCustomPrompt.value && customPromptValid.value) {
@@ -340,7 +342,7 @@ function scheduleNextStage() {
   timer = window.setTimeout(() => {
     activeIndex.value += 1;
     scheduleNextStage();
-  }, reducedMotion.value ? 500 : speed.value);
+  }, effectivePlaybackDelay.value);
 }
 
 function resetDemo() {
@@ -555,17 +557,38 @@ function createStreamingTrace(request: RefineRequest): Trace {
             </option>
           </select>
         </label>
-        <label>
+        <label :class="{ 'control-disabled': !displayModeSettings.displayedStagesEnabled }">
           <span class="range-label">
             Displayed stages
             <strong>{{ steps }}</strong>
           </span>
-          <input v-model.number="steps" min="3" max="8" step="1" type="range" />
-          <small class="control-help">{{ displayedStagesHelp }}</small>
+          <input
+            v-model.number="steps"
+            :disabled="!displayModeSettings.displayedStagesEnabled"
+            aria-describedby="displayed-stages-help"
+            min="3"
+            max="8"
+            step="1"
+            type="range"
+          />
+          <small id="displayed-stages-help" class="control-help">{{ displayModeSettings.help }}</small>
         </label>
         <label>
-          Speed
-          <input v-model.number="speed" min="1000" max="3200" step="100" type="range" />
+          <span class="range-label">
+            Playback speed
+            <strong>{{ playbackSpeed.label }}</strong>
+          </span>
+          <input
+            v-model.number="speedLevel"
+            :aria-valuetext="playbackSpeed.label"
+            aria-describedby="playback-speed-help"
+            min="1"
+            max="5"
+            step="1"
+            type="range"
+          />
+          <span class="range-endpoints" aria-hidden="true"><small>Slow</small><small>Fast</small></span>
+          <small id="playback-speed-help" class="control-help">Controls how quickly refinement stages appear.</small>
         </label>
 
         <div class="button-row primary-actions">
@@ -574,60 +597,90 @@ function createStreamingTrace(request: RefineRequest): Trace {
       </section>
 
       <section class="staff-controls" aria-label="Staff controls">
-        <span class="label">Staff controls</span>
-        <div class="model-status current-run-status" aria-live="polite">
-          <span>Current run</span>
-          <strong>{{ currentRunStatus.label }}</strong>
-          <small>{{ currentRunStatus.detail }}</small>
-        </div>
-        <div class="model-status" :class="`state-${modelStatus.state}`" aria-live="polite">
-          <span>Local preload: {{ modelStatusLabel }}</span>
-          <strong>{{ modelStatus.providerId ?? 'local fallback' }}</strong>
-          <div
-            class="model-progress"
-            role="progressbar"
-            aria-label="Model preload progress"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            :aria-valuenow="modelProgressPercent"
-          >
-            <i :style="modelProgressStyle"></i>
+        <div class="staff-heading">
+          <div>
+            <span class="label">Staff controls</span>
+            <small>Presentation, playback, and diagnostics</small>
           </div>
-          <small class="progress-copy">{{ modelProgressText }}</small>
-          <small>{{ modelStatus.message }}</small>
+          <button type="button" class="reset-action" @click="resetDemo">Reset demo</button>
         </div>
-        <div class="button-row">
-          <button type="button" @click="runDemo('replay')">Replay</button>
-          <button type="button" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
-            Autoplay loop
-          </button>
-          <button type="button" :class="{ selected: viewMode === 'steps' }" @click="viewMode = 'steps'">
-            Steps
-          </button>
-          <button type="button" :class="{ selected: viewMode === 'frames' }" @click="viewMode = 'frames'">
-            Every frame
-          </button>
-          <button type="button" :class="{ selected: viewMode === 'grid' }" @click="viewMode = 'grid'">
-            Token grid
-          </button>
-          <button type="button" @click="resetDemo">Reset</button>
+
+        <div class="staff-status-grid">
+          <div class="model-status current-run-status" aria-live="polite">
+            <span>Current run</span>
+            <strong>{{ currentRunStatus.label }}</strong>
+            <small>{{ currentRunStatus.detail }}</small>
+          </div>
+          <div class="model-status" :class="`state-${modelStatus.state}`" aria-live="polite">
+            <span>Model connection: {{ modelStatusLabel }}</span>
+            <strong>{{ modelStatus.providerId ?? 'local fallback' }}</strong>
+            <div
+              class="model-progress"
+              role="progressbar"
+              aria-label="Model preload progress"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              :aria-valuenow="modelProgressPercent"
+            >
+              <i :style="modelProgressStyle"></i>
+            </div>
+            <small class="progress-copy">{{ modelProgressText }}</small>
+            <small>{{ modelStatus.message }}</small>
+          </div>
         </div>
-        <label class="checkbox-line">
-          <input v-model="modelAssisted" :disabled="usingCustomPrompt" type="checkbox" />
-          Model-assisted
-        </label>
-        <label class="checkbox-line">
-          <input v-model="reducedMotion" type="checkbox" />
-          Reduced motion
-        </label>
-        <label class="checkbox-line">
-          <input v-model="showDebugLabels" type="checkbox" />
-          Debug labels
-        </label>
-        <label class="checkbox-line">
-          <input v-model="showRawModelText" type="checkbox" />
-          Raw model text
-        </label>
+
+        <fieldset class="staff-group display-mode-group">
+          <legend>Display mode</legend>
+          <div class="display-mode-options" role="group" aria-label="Display mode">
+            <button type="button" :aria-pressed="viewMode === 'steps'" :class="{ selected: viewMode === 'steps' }" @click="viewMode = 'steps'">
+              <strong>Steps</strong>
+              <small>Sampled presentation</small>
+            </button>
+            <button type="button" :aria-pressed="viewMode === 'frames'" :class="{ selected: viewMode === 'frames' }" @click="viewMode = 'frames'">
+              <strong>Every frame</strong>
+              <small>Inspect all drafts</small>
+            </button>
+            <button type="button" :aria-pressed="viewMode === 'grid'" :class="{ selected: viewMode === 'grid' }" @click="viewMode = 'grid'">
+              <strong>Token grid</strong>
+              <small>Inspect token changes</small>
+            </button>
+          </div>
+          <small class="staff-group-help">{{ displayModeSettings.help }}</small>
+        </fieldset>
+
+        <div class="staff-lower-grid">
+          <fieldset class="staff-group">
+            <legend>Playback</legend>
+            <div class="button-row staff-actions">
+              <button type="button" :disabled="!canRunDemo" @click="runDemo('replay')">Replay run</button>
+              <button type="button" :aria-pressed="autoplayEnabled" :class="{ selected: autoplayEnabled }" @click="toggleAutoplay">
+                {{ autoplayEnabled ? 'Stop autoplay' : 'Start autoplay' }}
+              </button>
+            </div>
+          </fieldset>
+
+          <fieldset class="staff-group">
+            <legend>Diagnostics</legend>
+            <div class="diagnostic-options">
+              <label class="checkbox-line" :class="{ 'control-disabled': usingCustomPrompt }">
+                <input v-model="modelAssisted" :disabled="usingCustomPrompt" type="checkbox" />
+                Model-assisted
+              </label>
+              <label class="checkbox-line">
+                <input v-model="reducedMotion" type="checkbox" />
+                Reduced motion
+              </label>
+              <label class="checkbox-line">
+                <input v-model="showDebugLabels" type="checkbox" />
+                Debug labels
+              </label>
+              <label class="checkbox-line">
+                <input v-model="showRawModelText" type="checkbox" />
+                Raw model text
+              </label>
+            </div>
+          </fieldset>
+        </div>
       </section>
 
       <footer class="explanation">

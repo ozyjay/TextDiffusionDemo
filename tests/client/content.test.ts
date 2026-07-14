@@ -82,10 +82,8 @@ describe('public copy', () => {
     expect(appSource).toContain('viewMode');
     expect(appSource).toContain('Frame');
     expect(appSource).toContain('Displayed stages');
-    expect(appSource).toContain('Presentation only');
-    expect(appSource).toContain('full denoising passes');
-    expect(appSource).toContain('Every-frame inspection overrides this count');
-    expect(appSource).toContain("viewMode.value === 'frames' || viewMode.value === 'grid'");
+    expect(appSource).toContain('displayModeSettings.displayedStagesEnabled');
+    expect(appSource).toContain('displayModeSettings.value.requestEveryFrame');
     expect(appSource).toContain('v-model.number="steps"');
   });
 
