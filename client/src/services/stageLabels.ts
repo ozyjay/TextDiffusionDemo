@@ -95,7 +95,7 @@ function removeReasoningSections(text: string): string {
 }
 
 function parseModelStageLabel(label: string): { kind: 'mask' | 'denoise'; current: number; total: number } | null {
-  const match = /^(mask|denoise)\s+(\d+)\/(\d+)$/i.exec(label.trim());
+  const match = /^(mask|denoise|frame)\s+(\d+)\/(\d+)$/i.exec(label.trim());
   if (!match) {
     return null;
   }

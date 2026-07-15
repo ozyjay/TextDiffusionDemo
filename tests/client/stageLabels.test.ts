@@ -4,6 +4,9 @@ import { buildStageDisplay, formatStageLabel, formatStageText } from '../../clie
 describe('stage labels', () => {
   it('aligns model frame labels with the public diffusion steps', () => {
     expect(formatStageLabel({ label: 'Mask 0/32', text: 'x', note: 'x' }, 0, false)).toBe('Canvas');
+    expect(formatStageLabel({ label: 'Frame 15/48', text: 'x', note: 'x' }, 1, false)).toBe(
+      'Iterative refinement'
+    );
     expect(formatStageLabel({ label: 'Denoise 1/32', text: 'x', note: 'x' }, 1, false)).toBe(
       'Iterative refinement'
     );
@@ -29,6 +32,9 @@ describe('stage labels', () => {
   });
 
   it('preserves raw model labels for staff debugging', () => {
+    expect(formatStageLabel({ label: 'Frame 15/48', text: 'x', note: 'x' }, 2, true)).toBe(
+      'Frame 15/48'
+    );
     expect(formatStageLabel({ label: 'Denoise 4/32', text: 'x', note: 'x' }, 2, true)).toBe(
       'Denoise 4/32'
     );
