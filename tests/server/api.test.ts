@@ -59,6 +59,81 @@ describe('Express API', () => {
     expect(response.body.status.updatedAt).toEqual(expect.any(String));
   });
 
+  it.each([
+    ['ready', { ready: true, state: 'running' }, 'ready', 'is ready'],
+    ['stopped', { ready: false, state: 'stopped' }, 'error', 'Start it from ModelDeck']
+  ] as const)('reports ModelDeck route status when it is %s', async (_label, route, state, message) => {
+    const urls: string[] = [];
+    const response = await request(createApp({
+      modelProvider: 'modeldeck',
+      modelDeckModel: 'text-diffusion-lab-q4',
+      fetchImpl: async (url) => {
+        urls.push(String(url));
+        return String(url).endsWith('/v1/health')
+          ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+          : new Response(JSON.stringify({ data: [{ id: 'text-diffusion-lab-q4', ...route }] }), { status: 200 });
+      }
+    })).get('/api/model-status').expect(200);
+
+    expect(response.body.status).toMatchObject({
+      state,
+      providerId: 'modeldeck',
+      route: 'text-diffusion-lab-q4',
+      preloadEnabled: false,
+      message: expect.stringContaining(message)
+    });
+    expect(urls).toHaveLength(2);
+    expect(urls.every((url) => !url.endsWith('/api/health'))).toBe(true);
+  });
+
+  it('reports safe fallback when the ModelDeck gateway is unavailable', async () => {
+    const response = await request(createApp({
+      modelProvider: 'modeldeck',
+      modelDeckBaseUrl: 'http://private-modeldeck.example:8600',
+      modelDeckModel: 'text-diffusion-lab-q4',
+      fetchImpl: async () => {
+        throw new Error('connect ECONNREFUSED private-modeldeck.example:8600');
+      }
+    })).get('/api/model-status').expect(200);
+
+    expect(response.body.status).toMatchObject({
+      state: 'error',
+      providerId: 'modeldeck',
+      preloadEnabled: false,
+      message: 'ModelDeck gateway is unavailable. Check ModelDeck; scripted fallback remains available.'
+    });
+    expect(JSON.stringify(response.body)).not.toContain('private-modeldeck');
+    expect(JSON.stringify(response.body)).not.toContain('ECONNREFUSED');
+  });
+
+  it('does not let MODEL_PRELOAD=0 force a ready ModelDeck route into fallback status', async () => {
+    const previousPreload = process.env.MODEL_PRELOAD;
+    process.env.MODEL_PRELOAD = '0';
+    try {
+      const response = await request(createApp({
+        modelProvider: 'modeldeck',
+        modelDeckModel: 'text-diffusion-lab-q4',
+        fetchImpl: async (url) => String(url).endsWith('/v1/health')
+          ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+          : new Response(JSON.stringify({
+              data: [{ id: 'text-diffusion-lab-q4', ready: true, state: 'running' }]
+            }), { status: 200 })
+      })).get('/api/model-status').expect(200);
+
+      expect(response.body.status).toMatchObject({
+        state: 'ready',
+        providerId: 'modeldeck',
+        preloadEnabled: false
+      });
+    } finally {
+      if (previousPreload === undefined) {
+        delete process.env.MODEL_PRELOAD;
+      } else {
+        process.env.MODEL_PRELOAD = previousPreload;
+      }
+    }
+  });
+
   it('returns ordered refinement stages for curated controls', async () => {
     const response = await request(app)
       .post('/api/refine')

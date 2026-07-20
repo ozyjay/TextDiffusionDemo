@@ -177,9 +177,16 @@ BACKEND_HOST=127.0.0.1
 BACKEND_PORT=8300
 BACKEND_URL=http://127.0.0.1:8300
 
-MODEL_ADAPTER_URL=http://127.0.0.1:8600
+MODEL_PROVIDER=modeldeck
+MODELDECK_BASE_URL=http://127.0.0.1:8600
+MODELDECK_MODEL=text-diffusion-lab-q4
+MODELDECK_DENOISING_STEPS=48
+MODELDECK_TIMEOUT_SECONDS=60
+MODEL_PRELOAD=0
 REPLAY_SERVICE_URL=http://127.0.0.1:8700
 ```
+
+`MODEL_ADAPTER_URL` is reserved for the legacy external-adapter provider and should be unset for native ModelDeck. `MODEL_PRELOAD` applies only to the project-local DiffusionGemma worker; ModelDeck owns its worker lifecycle.
 
 Do not silently fall back to random ports in Open Day mode.
 

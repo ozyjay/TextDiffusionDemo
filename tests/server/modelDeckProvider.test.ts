@@ -62,6 +62,21 @@ describe('ModelDeck provider', () => {
     });
   });
 
+  it('reports a stopped route with an actionable ModelDeck instruction', async () => {
+    const provider = new ModelDeckProvider({
+      model: 'text-diffusion-lab-q4',
+      fetchImpl: async (url) => String(url).endsWith('/health')
+        ? json({ ok: true })
+        : json({ data: [{ id: 'text-diffusion-lab-q4', ready: false, state: 'stopped' }] })
+    });
+
+    await expect(provider.isAvailable()).resolves.toEqual({
+      configured: true,
+      available: false,
+      reason: 'ModelDeck route "text-diffusion-lab-q4" is stopped. Start it from ModelDeck.'
+    });
+  });
+
   it('maps request fields, preserves explicit zero values, and propagates the seed', async () => {
     const mappedRequest: RefineRequest = {
       ...request,

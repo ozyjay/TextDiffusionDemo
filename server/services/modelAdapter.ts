@@ -65,6 +65,19 @@ export async function getModelProviderDiagnostics(
   return getProviderDiagnostics(providers, options.providerSelection ?? process.env.MODEL_PROVIDER);
 }
 
+export async function getModelDeckAvailability(
+  options: ModelAdapterOptions = {}
+): Promise<ProviderDiagnostics['providers'][number]> {
+  const provider = new ModelDeckProvider({
+    baseUrl: options.modelDeckBaseUrl,
+    model: options.modelDeckModel,
+    pollIntervalMs: options.modelDeckPollIntervalMs,
+    fetchImpl: options.fetchImpl
+  });
+  await provider.isAvailable();
+  return provider.lastStatus();
+}
+
 export async function preloadLocalModel(options: ModelAdapterOptions = {}): Promise<{
   ok: boolean;
   providerId: ModelProviderId;

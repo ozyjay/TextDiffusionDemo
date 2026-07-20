@@ -93,7 +93,7 @@ Windows PowerShell:
 .\scripts\pwsh\dev.ps1
 ```
 
-In the UI, use **Staff controls** to enable **Model-assisted**. For booth use, set `MODEL_PRELOAD=1` so the backend starts loading the local model as soon as the API starts:
+In the UI, use **Staff controls** to enable **Model-assisted**. When using the project-local DiffusionGemma provider, set `MODEL_PRELOAD=1` so the backend starts loading that local model as soon as the API starts:
 
 ```text
 macOS/Linux: .venv-diffusiongemma/bin/python -m diffusiongemma_adapter.worker
@@ -118,32 +118,29 @@ MODEL_PRELOAD_TIMEOUT_MS=600000
 
 ModelDeck is supported as a native text-diffusion provider. It uses ModelDeck's `/v1/diffuse` job API, not an OpenAI-compatible completions endpoint. ModelDeck must already be running; the demo remains available in scripted/template fallback mode when its gateway is offline.
 
-Start the Q4 worker from the ModelDeck repository in PowerShell:
-
-```powershell
-./scripts/start_diffusiongemma_q4.ps1
-```
-
-Then start Text Diffusion Lab with:
+ModelDeck owns the Q4 worker lifecycle. Start or stop the route from ModelDeck; Text Diffusion Lab only checks route readiness and submits jobs. Configure the demo with:
 
 ```bash
 MODEL_PROVIDER=modeldeck
 MODELDECK_BASE_URL=http://127.0.0.1:8600
-MODELDECK_MODEL=text-diffusion-q4
+MODELDECK_MODEL=text-diffusion-lab-q4
 MODELDECK_DENOISING_STEPS=48
 MODELDECK_TIMEOUT_SECONDS=60
+MODEL_PRELOAD=0
 MODELDECK_POLL_INTERVAL_MS=250
 ./scripts/dev.sh
 ```
+
+Leave `MODEL_ADAPTER_URL` unset with `MODEL_PROVIDER=modeldeck`. That variable is only for the legacy `external-adapter` provider.
 
 Open `http://127.0.0.1:3300`, enable **Model-assisted** under **Staff controls**, and run a story prompt. ModelDeck performs 48 denoising passes by default; the visitor-facing **Steps** control changes only how many intermediate stages are sampled for display. **Every frame** and **Token grid** retain every unique returned draft. A successful run always ends with ModelDeck's terminal `job.text` unchanged.
 
 Obvious corruption such as unresolved masks, severe repetition, or an unmet explicit constraint triggers one safer 48-pass retry. If that also fails, the public canvas hides the malformed response and shows a controlled retry message. Resetting or starting another run aborts the request and asks ModelDeck to cancel its job.
 
-If diagnostics report **gateway unavailable**, confirm ModelDeck is listening at `MODELDECK_BASE_URL` and that `GET /v1/health` succeeds. If they report **model not ready**, start the configured alias and confirm it appears with `ready: true` from `GET /v1/models`. Check the app-side view with:
+If diagnostics report **gateway unavailable**, confirm ModelDeck is listening at `MODELDECK_BASE_URL` and that `GET /v1/health` succeeds. If they report **route stopped**, start `text-diffusion-lab-q4` from ModelDeck and confirm it appears with `ready: true` from `GET /v1/models`. Check the public-safe app status with:
 
 ```bash
-curl http://127.0.0.1:8300/api/model-providers
+curl http://127.0.0.1:8300/api/model-status
 ```
 
 ### Red Hat Quant Model via vLLM
@@ -187,11 +184,11 @@ DIFFUSIONGEMMA_PYTHON=.venv-diffusiongemma/bin/python
 $env:DIFFUSIONGEMMA_PYTHON = ".\.venv-diffusiongemma\Scripts\python.exe"
 ```
 
-`MODEL_PROVIDER` can be `auto`, `modeldeck`, `external-adapter`, `redhat-vllm`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend checks ModelDeck first, then a configured external adapter, a configured Red Hat vLLM endpoint, the platform-appropriate local DiffusionGemma worker, and finally falls back safely. On Fedora/Linux and Windows, `auto` enables the Hugging Face Transformers worker. On macOS, `auto` enables the MLX worker. `MODEL_ADAPTER_URL` is still supported for third-party adapters that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`.
+`MODEL_PROVIDER` can be `auto`, `modeldeck`, `external-adapter`, `redhat-vllm`, `hf-diffusiongemma`, `mlx-diffusiongemma`, or `fallback`. In `auto` mode, the backend checks ModelDeck first, then a configured external adapter, a configured Red Hat vLLM endpoint, the platform-appropriate local DiffusionGemma worker, and finally falls back safely. On Fedora/Linux and Windows, `auto` enables the Hugging Face Transformers worker. On macOS, `auto` enables the MLX worker. `MODEL_ADAPTER_URL` is only for third-party `external-adapter` services that expose `GET <MODEL_ADAPTER_URL>/api/health` and `POST <MODEL_ADAPTER_URL>/api/refine`; leave it unset for native ModelDeck.
 
 `DIFFUSIONGEMMA_ENGINE` can be `auto`, `transformers`, or `mlx`. Leave it as `auto` unless you are explicitly testing one runtime.
 
-The HTTP adapter timeout stays short so unavailable external services fail over quickly. The local worker timeout is separate because a cold 26B model load can take a while. `MODEL_PRELOAD=1` sends a preload command to the local worker on backend startup, and `MODEL_PRELOAD_TIMEOUT_MS` controls how long startup logging waits for the ready signal.
+The HTTP adapter timeout stays short so unavailable external services fail over quickly. The local worker timeout is separate because a cold 26B model load can take a while. `MODEL_PRELOAD=1` sends a preload command only to the project-local DiffusionGemma worker, and `MODEL_PRELOAD_TIMEOUT_MS` controls how long startup logging waits for that local ready signal. Neither setting starts, stops, or preloads ModelDeck.
 
 Provider diagnostics are available for staff/debug tooling:
 
@@ -277,6 +274,7 @@ Reserved Text Diffusion Lab ports:
 - Frontend: `127.0.0.1:3300`
 - Backend/API: `127.0.0.1:8300`
 - Legacy adapter compatibility: `127.0.0.1:8600`
+- Native ModelDeck gateway: `127.0.0.1:8600` (configured through `MODELDECK_BASE_URL`, not `MODEL_ADAPTER_URL`)
 
 Open Day mode should not silently choose random fallback ports.
 

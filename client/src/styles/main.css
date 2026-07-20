@@ -773,7 +773,8 @@ input[type='range'] {
   background: #f8d66d;
 }
 
-.model-status.state-error .model-progress i {
+.model-status.state-error .model-progress i,
+.model-status.state-fallback .model-progress i {
   background: #ff9a8b;
 }
 
@@ -791,7 +792,8 @@ input[type='range'] {
   background: rgba(70, 60, 20, 0.68);
 }
 
-.model-status.state-error {
+.model-status.state-error,
+.model-status.state-fallback {
   border-color: #ff9a8b;
   background: rgba(75, 28, 30, 0.72);
 }

@@ -68,7 +68,7 @@ describe('public copy', () => {
     expect(appSource).toContain('Model-assisted');
     expect(appSource).toContain('modelAssisted');
     expect(appSource).toContain('model-progress');
-    expect(appSource).toContain('Model preload progress');
+    expect(appSource).toContain('Model readiness progress');
     expect(appSource).toContain('showRawModelText');
     expect(appSource).toContain('Raw model text');
     expect(appSource).toContain('Raw decoded model text');

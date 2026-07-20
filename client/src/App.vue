@@ -48,7 +48,7 @@ const reducedMotion = ref(false);
 const autoplayEnabled = ref(false);
 const modelAssisted = ref(false);
 const modelStatus = ref<ModelRuntimeStatus>({
-  state: 'fallback',
+  state: 'loading',
   message: 'Checking model status...',
   updatedAt: new Date().toISOString(),
   preloadEnabled: false
@@ -219,7 +219,7 @@ onMounted(async () => {
   await refreshModelStatus();
   modelStatusTimer = window.setInterval(() => {
     void refreshModelStatus();
-  }, 2500);
+  }, 5000);
   syncSelectedPrompt();
 });
 
@@ -613,11 +613,11 @@ function createStreamingTrace(request: RefineRequest): Trace {
           </div>
           <div class="model-status" :class="`state-${modelStatus.state}`" aria-live="polite">
             <span>Model connection: {{ modelStatusLabel }}</span>
-            <strong>{{ modelStatus.providerId ?? 'local fallback' }}</strong>
+            <strong>{{ modelStatus.providerId === 'modeldeck' ? `ModelDeck · ${modelStatus.route ?? 'configured route'}` : modelStatus.providerId ?? 'local fallback' }}</strong>
             <div
               class="model-progress"
               role="progressbar"
-              aria-label="Model preload progress"
+              aria-label="Model readiness progress"
               aria-valuemin="0"
               aria-valuemax="100"
               :aria-valuenow="modelProgressPercent"

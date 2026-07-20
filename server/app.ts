@@ -5,7 +5,7 @@ import {
   getTraces,
   refineTrace
 } from './services/traceService';
-import { getModelProviderDiagnostics, requestModelTrace } from './services/modelAdapter';
+import { getModelDeckAvailability, getModelProviderDiagnostics, requestModelTrace } from './services/modelAdapter';
 import { getModelRuntimeStatus } from './services/modelRuntimeStatus';
 import type { RefineRequest } from '../shared/types';
 import type { Trace } from '../shared/types';
@@ -24,6 +24,8 @@ export interface AppOptions {
   modelAdapterTimeoutMs?: number;
   modelWorkerTimeoutMs?: number;
   modelProvider?: string;
+  modelDeckBaseUrl?: string;
+  modelDeckModel?: string;
   fetchImpl?: typeof fetch;
   modelTraceProvider?: ModelTraceProvider;
 }
@@ -35,6 +37,7 @@ interface RefinementResult {
 
 export function createApp(options: AppOptions = {}) {
   const app = express();
+  const readModelStatus = createModelStatusReader(options);
 
   app.use(express.json());
 
@@ -66,8 +69,8 @@ export function createApp(options: AppOptions = {}) {
     }));
   });
 
-  app.get('/api/model-status', (_request, response) => {
-    response.json({ status: getModelRuntimeStatus() });
+  app.get('/api/model-status', async (_request, response) => {
+    response.json({ status: await readModelStatus() });
   });
 
   app.post('/api/refine', async (request, response) => {
@@ -126,6 +129,74 @@ export function createApp(options: AppOptions = {}) {
   });
 
   return app;
+}
+
+function createModelStatusReader(options: AppOptions): () => Promise<ReturnType<typeof getModelRuntimeStatus>> {
+  let cached: ReturnType<typeof getModelRuntimeStatus> | null = null;
+  let cachedAt = 0;
+  let pending: Promise<ReturnType<typeof getModelRuntimeStatus>> | null = null;
+
+  return async () => {
+    const provider = options.modelProvider ?? process.env.MODEL_PROVIDER;
+    if (provider !== 'modeldeck') {
+      return getModelRuntimeStatus();
+    }
+
+    if (cached && Date.now() - cachedAt < 5000) {
+      return cached;
+    }
+    if (pending) {
+      return pending;
+    }
+
+    const route = options.modelDeckModel ?? process.env.MODELDECK_MODEL ?? 'text-diffusion-lab-q4';
+    pending = getModelDeckAvailability({
+      fetchImpl: options.fetchImpl,
+      modelDeckBaseUrl: options.modelDeckBaseUrl,
+      modelDeckModel: route
+    }).then((status) => {
+      const reason = status.reason ?? '';
+      const loading = /\b(loading|starting|queued)\b/i.test(reason);
+      cached = {
+        state: status.available ? 'ready' : loading ? 'loading' : 'error',
+        providerId: 'modeldeck',
+        route,
+        message: publicModelDeckMessage(route, status.available, reason, loading),
+        updatedAt: new Date().toISOString(),
+        preloadEnabled: false,
+        progress: {
+          percent: status.available ? 100 : loading ? 10 : 0,
+          indeterminate: loading,
+          label: status.available
+            ? 'ModelDeck route is ready.'
+            : loading
+              ? 'ModelDeck is determining route readiness.'
+              : 'Safe scripted fallback is available.'
+        }
+      };
+      cachedAt = Date.now();
+      return cached;
+    }).finally(() => {
+      pending = null;
+    });
+    return pending;
+  };
+}
+
+function publicModelDeckMessage(route: string, ready: boolean, reason: string, loading: boolean): string {
+  if (ready) {
+    return `ModelDeck route "${route}" is ready.`;
+  }
+  if (loading) {
+    return `ModelDeck route "${route}" is loading. Scripted fallback remains available.`;
+  }
+  if (/\bstopped\b/i.test(reason)) {
+    return `ModelDeck route "${route}" is stopped. Start it from ModelDeck.`;
+  }
+  if (/\b(unavailable|not ready)\b/i.test(reason) && !/gateway/i.test(reason)) {
+    return `ModelDeck route "${route}" is not ready. Start it from ModelDeck.`;
+  }
+  return 'ModelDeck gateway is unavailable. Check ModelDeck; scripted fallback remains available.';
 }
 
 function buildRefineRequest(body: Partial<RefineRequest>): RefineRequest | null {

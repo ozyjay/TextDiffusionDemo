@@ -50,7 +50,7 @@ export class ModelDeckProvider extends BaseModelProvider implements ModelTracePr
   constructor(options: ModelDeckProviderOptions = {}) {
     super();
     this.baseUrl = normaliseBaseUrl(options.baseUrl ?? process.env.MODELDECK_BASE_URL ?? 'http://127.0.0.1:8600');
-    this.model = options.model ?? process.env.MODELDECK_MODEL ?? 'text-diffusion-q4';
+    this.model = options.model ?? process.env.MODELDECK_MODEL ?? 'text-diffusion-lab-q4';
     this.denoisingSteps = normaliseInteger(
       options.denoisingSteps ?? Number(process.env.MODELDECK_DENOISING_STEPS),
       48,
@@ -106,17 +106,32 @@ export class ModelDeckProvider extends BaseModelProvider implements ModelTracePr
         });
       }
       if (configuredModel.ready !== true) {
+        const routeState = configuredModel.state?.toLowerCase();
+        if (routeState === 'stopped') {
+          return this.updateAvailability({
+            configured: true,
+            available: false,
+            reason: `ModelDeck route "${this.model}" is stopped. Start it from ModelDeck.`
+          });
+        }
+        if (routeState === 'loading' || routeState === 'starting' || routeState === 'queued') {
+          return this.updateAvailability({
+            configured: true,
+            available: false,
+            reason: `ModelDeck route "${this.model}" is ${routeState}.`
+          });
+        }
         return this.updateAvailability({
           configured: true,
           available: false,
-          reason: `ModelDeck model "${this.model}" is not ready.`
+          reason: `ModelDeck route "${this.model}" is not ready. Start it from ModelDeck.`
         });
       }
 
       return this.updateAvailability({
         configured: true,
         available: true,
-        reason: `ModelDeck gateway and model "${this.model}" are ready.`
+        reason: `ModelDeck gateway and route "${this.model}" are ready.`
       });
     } catch (error) {
       return this.updateAvailability({
@@ -380,7 +395,7 @@ function parseJob(value: unknown): ModelDeckJob | null {
   return value as unknown as ModelDeckJob;
 }
 
-function findModel(value: unknown, alias: string): { ready?: boolean } | null {
+function findModel(value: unknown, alias: string): { ready?: boolean; state?: string } | null {
   if (!isRecord(value) && !Array.isArray(value)) {
     return null;
   }
@@ -397,7 +412,11 @@ function findModel(value: unknown, alias: string): { ready?: boolean } | null {
     }
     const id = candidate.id ?? candidate.model ?? candidate.alias ?? candidate.name;
     if (id === alias) {
-      return { ready: candidate.ready === true };
+      const state = candidate.state ?? candidate.status;
+      return {
+        ready: candidate.ready === true,
+        state: typeof state === 'string' ? state : undefined
+      };
     }
   }
   return null;

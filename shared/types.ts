@@ -66,6 +66,7 @@ export interface ModelLoadProgress {
 export interface ModelRuntimeStatus {
   state: ModelRuntimeState;
   providerId?: string;
+  route?: string;
   message: string;
   updatedAt: string;
   preloadEnabled: boolean;

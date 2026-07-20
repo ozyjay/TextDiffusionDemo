@@ -44,6 +44,8 @@ The demo must be reliable enough for a public Open Day booth. It should fail saf
 | 60-minute run | App remains responsive. |
 | Backend unavailable | App switches to replay or scripted mode. |
 | Model unavailable | App does not block; fallback still works. |
+| ModelDeck preflight | Reads gateway and route status without controlling workers; launch continues with safe fallback if unavailable. |
+| ModelDeck status | Ready, stopped, loading, and unavailable states show a concise public-safe action. |
 | Browser refresh | App returns to clean start state. |
 | Port conflict | Launch script stops and prints a clear error. |
 

@@ -14,6 +14,10 @@ createApp().listen(port, host, () => {
 
 async function bootModelStatus(): Promise<void> {
   await logModelStatus();
+  if (process.env.MODEL_PROVIDER === 'modeldeck') {
+    console.log('[model] preload: not applicable; ModelDeck owns its worker lifecycle');
+    return;
+  }
   if (!envFlag('MODEL_PRELOAD', false)) {
     setModelRuntimeStatus({
       state: 'fallback',

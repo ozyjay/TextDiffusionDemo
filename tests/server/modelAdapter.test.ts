@@ -240,14 +240,14 @@ describe('model adapter', () => {
   it('uses the native ModelDeck provider when explicitly selected', async () => {
     const seedTrace = refineTrace(request);
     const provider = new ModelDeckProvider({
-      model: 'text-diffusion-q4',
+      model: 'text-diffusion-lab-q4',
       fetchImpl: async (url) => {
         if (String(url).endsWith('/v1/health')) {
           return new Response(JSON.stringify({ ok: true }), { status: 200 });
         }
         if (String(url).endsWith('/v1/models')) {
           return new Response(JSON.stringify({
-            data: [{ id: 'text-diffusion-q4', ready: true }]
+            data: [{ id: 'text-diffusion-lab-q4', ready: true }]
           }), { status: 200 });
         }
         expect(String(url)).toBe('http://127.0.0.1:8600/v1/diffuse');
@@ -320,6 +320,25 @@ describe('model adapter', () => {
       'fallback'
     ]);
     expect(JSON.stringify(diagnostics)).not.toContain('secret-host');
+  });
+
+  it('does not request legacy adapter health when MODEL_ADAPTER_URL is unset', async () => {
+    const urls: string[] = [];
+
+    await getModelProviderDiagnostics({
+      adapterUrl: '',
+      providerSelection: 'modeldeck',
+      fetchImpl: async (url) => {
+        urls.push(String(url));
+        return String(url).endsWith('/v1/models')
+          ? new Response(JSON.stringify({ data: [] }), { status: 200 })
+          : new Response(JSON.stringify({ ok: true }), { status: 200 });
+      },
+      modelTraceProvider: async () => null,
+      platform: 'linux'
+    });
+
+    expect(urls.some((url) => url.endsWith('/api/health'))).toBe(false);
   });
 
   it('uses only the MLX local provider in auto mode on macOS', async () => {
